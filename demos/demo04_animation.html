@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 04 — Procedurální animace</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #controls { position: absolute; top: 80px; right: 20px;
+                    display: flex; flex-direction: column; gap: 6px; z-index: 100; }
+        #controls button {
+            padding: 10px 18px; background: #2a2a35; color: #ddd;
+            border: 1px solid #444; border-radius: 6px; cursor: pointer;
+            font-size: 1em; min-width: 140px; text-align: left;
+            transition: background 0.15s;
+        }
+        #controls button:hover  { background: #3a3a45; }
+        #controls button.active { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
+        #current { position: absolute; bottom: 10px; left: 10px;
+                   background: rgba(0,0,0,0.5); padding: 8px 12px;
+                   border-radius: 6px; font-size: 0.85em; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 04 — Procedurální animace</h2>
+        <p>Sin/cos cykly v reálném čase. Vyber animaci tlačítkem vpravo.</p>
+    </div>
+    <div id="controls"></div>
+    <div id="current"></div>
+
+    <script type="module">
+        import { Skeleton }     from '../src/model/Skeleton.js';
+        import { StickmanView } from '../src/view/StickmanView.js';
+        import { BasicScene }   from '../src/scene/BasicScene.js';
+
+        // === 1. Setup ===
+        const skel  = new Skeleton(8);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({ cameraHeight: 0, cameraDistance: 18 });
+        scene.scene.add(view.group);
+
+        // === 2. Animace ===
+        // Každá animace je funkce (skel, time) → void.
+        // Volá se každý frame — musí PLNĚ definovat všechny úhly, které používá
+        // (žádné "zbytky" z předchozího framu nepředpokládá).
+        // 'time' je čas v sekundách od startu (kontinuálně rostoucí).
+        // ----------------------------------------------------------------------
+
+        // STOP = nic, postava zůstává v rest pose
+        function stop(skel, time) {
+            // úmyslně prázdná
+        }
+
+        // IDLE = dýchání + mírné kolísání hlavy. Pomalé, klidné.
+        function idle(skel, time) {
+            const t = time * 1.2;                   // pomalá frekvence
+            const breath = Math.sin(t) * 1;         // ±1° dýchání
+            // Lehké kolébání ramen (jak se hrudník zvedá)
+            skel.setAngle('shoulderL', 'x', 0);
+            skel.setAngle('shoulderL', 'z', 5 + breath);
+            skel.setAngle('shoulderR', 'x', 0);
+            skel.setAngle('shoulderR', 'z', 5 + breath);
+            // Lehký předklon hlavy v rytmu dýchání
+            skel.setAngle('neck', 'x', 5 + breath * 0.5);
+            skel.setAngle('neck', 'z', Math.sin(t * 0.7) * 3);  // mírný úklon sem-tam
+        }
+
+        // WAVE = pravá paže nad hlavou, předloktí osciluje (mávání)
+        function wave(skel, time) {
+            // Levá paže visí klidně
+            skel.setAngle('shoulderL', 'x', 0);
+            skel.setAngle('shoulderL', 'z', 8);     // jen lehce od těla
+            // Pravá paže nahoru
+            skel.setAngle('shoulderR', 'z', 155);   // skoro nad hlavu
+            skel.setAngle('shoulderR', 'x', 0);
+            // Mávání = oscilace v lokti kolem 90° ohybu
+            const swing = Math.sin(time * 5) * 30;  // ±30° kolem 90°, frekvence ~0.8 Hz
+            skel.setAngle('elbowR', 'x', 90 + swing);
+            // Hlava nakloněná ke zvednuté ruce
+            skel.setAngle('neck', 'z', -10);
+            skel.setAngle('neck', 'x', 0);
+        }
+
+        // DANCE = synchronizovaný pohyb končetin a hlavy v rytmu
+        function dance(skel, time) {
+            const t = time * 3;                     // rychlejší beat
+            // Ruce — alternující zvedání (jedna nahoru, druhá dolů)
+            skel.setAngle('shoulderL', 'x', 50 + Math.sin(t) * 40);
+            skel.setAngle('shoulderL', 'z', 20);
+            skel.setAngle('shoulderR', 'x', 50 + Math.sin(t + Math.PI) * 40);
+            skel.setAngle('shoulderR', 'z', 20);
+            // Lokty se ohýbají proti opačné fázi
+            skel.setAngle('elbowL', 'x', 60 + Math.sin(t + 1) * 30);
+            skel.setAngle('elbowR', 'x', 60 + Math.sin(t + 1 + Math.PI) * 30);
+            // Boky houpání (oba dělají totéž → celá pánev se kýve)
+            const hipSwing = Math.sin(t * 0.5) * 8;
+            skel.setAngle('hipL', 'x', 0);
+            skel.setAngle('hipL', 'z', hipSwing);
+            skel.setAngle('hipR', 'x', 0);
+            skel.setAngle('hipR', 'z', hipSwing);
+            // Lehké pokrčení v kolenou v rytmu
+            const kneeBend = (Math.sin(t * 2) + 1) / 2 * 20;  // 0..20°
+            skel.setAngle('kneeL', 'x', kneeBend);
+            skel.setAngle('kneeR', 'x', kneeBend);
+            // Hlava krouží
+            skel.setAngle('neck', 'x', Math.sin(t * 0.5) * 10);
+            skel.setAngle('neck', 'z', Math.cos(t * 0.5) * 15);
+        }
+
+        // SQUATS = opakovaný dřep s rukama dopředu pro rovnováhu
+        function squats(skel, time) {
+            // Sinus → 0..1 (jak hluboko jsme v dřepu)
+            const depth = (Math.sin(time * 1.8) + 1) / 2;
+            // Dolní končetiny
+            skel.setAngle('hipL', 'x', 100 * depth);
+            skel.setAngle('hipL', 'z', 0);
+            skel.setAngle('hipR', 'x', 100 * depth);
+            skel.setAngle('hipR', 'z', 0);
+            skel.setAngle('kneeL', 'x', 130 * depth);
+            skel.setAngle('kneeR', 'x', 130 * depth);
+            // Ruce zvedáme dopředu jak se snižujeme (rovnováha)
+            skel.setAngle('shoulderL', 'x', 80 * depth);
+            skel.setAngle('shoulderL', 'z', 5);
+            skel.setAngle('shoulderR', 'x', 80 * depth);
+            skel.setAngle('shoulderR', 'z', 5);
+            // Mírný předklon v plném dřepu
+            skel.setAngle('neck', 'x', 25 * depth);
+            skel.setAngle('neck', 'z', 0);
+        }
+
+        // BREATHE_DEEP = výrazné dýchání: ramena nahoru-dolů + nádech do hrudníku
+        function breatheDeep(skel, time) {
+            // Pomalá sinusoida — fáze nádechu/výdechu
+            const phase = Math.sin(time * 0.8);
+            // Ramena se zvedají při nádechu (anatomická abdukce drobně)
+            skel.setAngle('shoulderL', 'z', 10 + phase * 8);
+            skel.setAngle('shoulderL', 'x', 0);
+            skel.setAngle('shoulderR', 'z', 10 + phase * 8);
+            skel.setAngle('shoulderR', 'x', 0);
+            // Hlava lehce do záklonu při nádechu
+            skel.setAngle('neck', 'x', -phase * 8);
+            skel.setAngle('neck', 'z', 0);
+        }
+
+        const ANIMATIONS = {
+            stop:    { name: 'Stop (rest pose)', fn: stop },
+            idle:    { name: 'Idle (dýchání)',   fn: idle },
+            breathe: { name: 'Hluboké dýchání',  fn: breatheDeep },
+            wave:    { name: 'Wave (mávání)',    fn: wave },
+            dance:   { name: 'Dance',            fn: dance },
+            squats:  { name: 'Squats (dřepy)',   fn: squats },
+        };
+
+        // === 3. UI ===
+        const ui = document.getElementById('controls');
+        const currentEl = document.getElementById('current');
+        const buttons = {};
+        let currentFn = stop;
+
+        function activate(key) {
+            const anim = ANIMATIONS[key];
+            // Reset = vyčistí úhly z předchozí animace, ať nezůstanou "zatuhlé"
+            skel.reset();
+            currentFn = anim.fn;
+            currentEl.innerHTML = `<strong>Aktivní:</strong> ${anim.name}`;
+            Object.values(buttons).forEach(b => b.classList.remove('active'));
+            buttons[key].classList.add('active');
+        }
+
+        Object.entries(ANIMATIONS).forEach(([key, anim]) => {
+            const btn = document.createElement('button');
+            btn.textContent = anim.name;
+            btn.addEventListener('click', () => activate(key));
+            ui.appendChild(btn);
+            buttons[key] = btn;
+        });
+
+        // === 4. Animační smyčka ===
+        scene.onUpdate((delta, time) => {
+            currentFn(skel, time);    // animace nastaví úhly podle času
+            view.update();             // view sync s modelem
+        });
+        scene.start();
+        activate('idle');              // výchozí = klidné dýchání
+    </script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Stickman Akvárium s umělou inteligencí - Finální verze</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #222; font-family: sans-serif; }
+        #info { position: absolute; top: 10px; width: 100%; text-align: center; color: #fff; z-index: 100; pointer-events: none; text-shadow: 1px 1px 2px black; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div id="info">
+        <h2>Skleněné Akvárium: Simulace Života</h2>
+        <p>Tažením myši otáčej kamerou. Nyní s opravenou výškou a funkčními lokty!</p>
+    </div>
+
+    <script>
+        // 1. ZÁKLADNÍ NASTAVENÍ SCÉNY
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a2b3c);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 15, 35);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.maxPolarAngle = Math.PI / 2 + 0.1;
+
+        // Světla
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // 2. TVORBA SKLENĚNÉHO AKVÁRIA
+        const tankSize = 20;
+        const tankHeight = 10;
+        
+        const floorGeo = new THREE.PlaneGeometry(tankSize, tankSize);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const glassGeo = new THREE.BoxGeometry(tankSize, tankHeight, tankSize);
+        const glassMat = new THREE.MeshPhysicalMaterial({ 
+            color: 0x88ccff, metalness: 0.1, roughness: 0.1, 
+            transparent: true, opacity: 0.2, side: THREE.DoubleSide
+        });
+        const glassBox = new THREE.Mesh(glassGeo, glassMat);
+        glassBox.position.y = tankHeight / 2;
+        scene.add(glassBox);
+
+        const edges = new THREE.EdgesGeometry(glassGeo);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x5599cc }));
+        line.position.y = tankHeight / 2;
+        scene.add(line);
+
+        // 3. TŘÍDA STICKMAN 
+        const stickmanMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.5 });
+
+        class Stickman {
+            constructor() {
+                this.root = new THREE.Group();
+                
+                this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.2, 0.3), stickmanMat);
+                this.torso.castShadow = true;
+                this.root.add(this.torso);
+
+                this.head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), stickmanMat);
+                this.head.position.y = 0.9;
+                this.torso.add(this.head);
+
+                const createLimb = () => {
+                    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.7).translate(0, -0.35, 0), stickmanMat);
+                    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.7).translate(0, -0.35, 0), stickmanMat);
+                    lower.position.y = -0.7; // Posunutí kloubu
+                    upper.add(lower);
+                    upper.castShadow = true; lower.castShadow = true;
+                    return { upper, lower };
+                };
+
+                this.leftArm = createLimb(); this.leftArm.upper.position.set(0.4, 0.5, 0); this.torso.add(this.leftArm.upper);
+                this.rightArm = createLimb(); this.rightArm.upper.position.set(-0.4, 0.5, 0); this.torso.add(this.rightArm.upper);
+                this.leftLeg = createLimb(); this.leftLeg.upper.position.set(0.2, -0.6, 0); this.torso.add(this.leftLeg.upper);
+                this.rightLeg = createLimb(); this.rightLeg.upper.position.set(-0.2, -0.6, 0); this.torso.add(this.rightLeg.upper);
+
+                scene.add(this.root);
+
+                this.states = ['IDLE', 'WALK', 'RUN', 'SIT', 'LIE', 'JUMP'];
+                this.currentState = 'IDLE';
+                this.stateTimer = 0;
+                this.targetPos = new THREE.Vector3();
+                this.speed = 0;
+                
+                this.root.position.set((Math.random() - 0.5) * 18, 0, (Math.random() - 0.5) * 18);
+            }
+
+            pickNewState() {
+                this.currentState = this.states[Math.floor(Math.random() * this.states.length)];
+                this.stateTimer = 2 + Math.random() * 4;
+
+                if (this.currentState === 'WALK' || this.currentState === 'RUN') {
+                    this.targetPos.set((Math.random() - 0.5) * 18, 0, (Math.random() - 0.5) * 18);
+                    const angle = Math.atan2(this.targetPos.x - this.root.position.x, this.targetPos.z - this.root.position.z);
+                    this.root.rotation.y = angle;
+                    this.speed = this.currentState === 'WALK' ? 2 : 5;
+                }
+            }
+
+            resetPose() {
+                this.root.rotation.x = 0; this.root.rotation.z = 0;
+                this.torso.rotation.set(0,0,0);
+                this.leftArm.upper.rotation.set(0,0,0); this.leftArm.lower.rotation.set(0,0,0);
+                this.rightArm.upper.rotation.set(0,0,0); this.rightArm.lower.rotation.set(0,0,0);
+                this.leftLeg.upper.rotation.set(0,0,0); this.leftLeg.lower.rotation.set(0,0,0);
+                this.rightLeg.upper.rotation.set(0,0,0); this.rightLeg.lower.rotation.set(0,0,0);
+            }
+
+            update(delta, time) {
+                this.stateTimer -= delta;
+                if (this.stateTimer <= 0) {
+                    this.pickNewState();
+                    this.resetPose();
+                }
+
+                let baseY = 1.6;
+
+                switch (this.currentState) {
+                    case 'IDLE':
+                        this.torso.position.y = baseY;
+                        const breath = Math.sin(time * 2) * 0.05;
+                        this.leftArm.upper.rotation.z = 0.1 + breath;
+                        this.rightArm.upper.rotation.z = -0.1 - breath;
+                        this.leftArm.lower.rotation.x = -0.1;
+                        this.rightArm.lower.rotation.x = -0.1;
+                        break;
+
+                    case 'WALK':
+                    case 'RUN':
+                        const dist = this.root.position.distanceTo(this.targetPos);
+                        if (dist > 0.1) {
+                            this.root.position.x += Math.sin(this.root.rotation.y) * this.speed * delta;
+                            this.root.position.z += Math.cos(this.root.rotation.y) * this.speed * delta;
+                        } else {
+                            this.pickNewState();
+                        }
+
+                        const t = time * (this.currentState === 'WALK' ? 5 : 10);
+                        const amp = this.currentState === 'WALK' ? 0.6 : 1.2;
+                        
+                        this.leftLeg.upper.rotation.x = Math.sin(t) * amp;
+                        this.leftLeg.lower.rotation.x = Math.max(0, Math.sin(t - 1)) * amp;
+                        this.rightLeg.upper.rotation.x = Math.sin(t + Math.PI) * amp;
+                        this.rightLeg.lower.rotation.x = Math.max(0, Math.sin(t + Math.PI - 1)) * amp;
+                        
+                        this.leftArm.upper.rotation.x = Math.sin(t + Math.PI) * (amp * 0.8);
+                        this.rightArm.upper.rotation.x = Math.sin(t) * (amp * 0.8);
+                        this.leftArm.lower.rotation.x = -Math.max(0, Math.sin(t + Math.PI - 0.5)) * amp * 1.2;
+                        this.rightArm.lower.rotation.x = -Math.max(0, Math.sin(t - 0.5)) * amp * 1.2;
+                        
+                        this.torso.position.y = baseY + Math.abs(Math.sin(t * 2)) * (this.currentState === 'WALK' ? 0.05 : 0.2);
+                        break;
+
+                    case 'SIT':
+                        this.torso.position.y = 0.75; 
+                        this.leftLeg.upper.rotation.x = -Math.PI / 2;
+                        this.leftLeg.lower.rotation.x = 0.1; 
+                        this.rightLeg.upper.rotation.x = -Math.PI / 2;
+                        this.rightLeg.lower.rotation.x = 0.1;
+                        
+                        this.leftArm.upper.rotation.x = -0.5;
+                        this.rightArm.upper.rotation.x = -0.5;
+                        this.leftArm.lower.rotation.x = -0.8;
+                        this.rightArm.lower.rotation.x = -0.8;
+                        break;
+
+                    case 'LIE':
+                        this.torso.position.y = 0.45;
+                        this.root.rotation.x = -Math.PI / 2; 
+                        this.leftArm.upper.rotation.z = 0.2;
+                        this.rightArm.upper.rotation.z = -0.2;
+                        this.leftArm.lower.rotation.x = -0.3;
+                        this.rightArm.lower.rotation.x = -0.3;
+                        this.leftLeg.lower.rotation.x = 0.2;
+                        this.rightLeg.lower.rotation.x = 0.2;
+                        break;
+
+                    case 'JUMP':
+                        const jumpCycle = Math.abs(Math.sin(time * 4));
+                        this.torso.position.y = baseY + jumpCycle * 1.5;
+                        this.leftLeg.upper.rotation.x = -jumpCycle * 0.5;
+                        this.rightLeg.upper.rotation.x = -jumpCycle * 0.5;
+                        this.leftLeg.lower.rotation.x = jumpCycle * 1.0;
+                        this.rightLeg.lower.rotation.x = jumpCycle * 1.0;
+                        this.leftArm.upper.rotation.z = jumpCycle * 2;
+                        this.rightArm.upper.rotation.z = -jumpCycle * 2;
+                        this.leftArm.lower.rotation.x = -jumpCycle * 1.5;
+                        this.rightArm.lower.rotation.x = -jumpCycle * 1.5;
+                        break;
+                }
+            }
+        }
+
+        const stickmen = [new Stickman(), new Stickman(), new Stickman()];
+
+        // 4. HLAVNÍ ANIMAČNÍ SMYČKA
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            controls.update();
+            stickmen.forEach(stickman => stickman.update(delta, time));
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 11 — Plavání</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a3344;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #controls { position: absolute; top: 80px; right: 20px;
+                    display: flex; flex-direction: column; gap: 6px; z-index: 100; }
+        #controls button {
+            padding: 10px 18px; background: #2a3a4a; color: #ddd;
+            border: 1px solid #455; border-radius: 6px; cursor: pointer;
+            font-size: 1em; min-width: 160px; text-align: left;
+        }
+        #controls button:hover  { background: #3a4a5a; }
+        #controls button.active { background: #66ccee; color: #1a2a3a; border-color: #66ccee; }
+        #panel { position: absolute; top: 80px; left: 20px;
+                 background: #2a3a4a; padding: 12px 16px;
+                 border-radius: 6px; border: 1px solid #455;
+                 width: 200px; z-index: 100; }
+        .field { display: flex; align-items: center; margin: 6px 0; gap: 10px;
+                 font-size: 0.85em; }
+        .field label { width: 60px; }
+        .field input[type=range] { flex: 1; min-width: 0; accent-color: #66ccee; }
+        .field .v { width: 50px; font-family: monospace; color: #88ccff; text-align: right; }
+        #stats { position: absolute; bottom: 10px; left: 10px;
+                 background: rgba(0,0,0,0.55); padding: 10px 14px;
+                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
+                 min-width: 220px; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 11 — Plavání</h2>
+        <p>Postava horizontálně (rootRotation.x = ±90°), žádná opora — jen pohyb končetin.</p>
+    </div>
+
+    <div id="panel">
+        <div class="field">
+            <label>Tempo</label>
+            <input id="tempo" type="range" min="0.3" max="2.5" step="0.1" value="1.0">
+            <span class="v" id="tempoVal">1.0 Hz</span>
+        </div>
+    </div>
+
+    <div id="controls"></div>
+    <div id="stats"></div>
+
+    <script type="module">
+        import * as THREE       from 'three';
+        import { Skeleton }     from '../src/model/Skeleton.js';
+        import { StickmanView } from '../src/view/StickmanView.js';
+        import { BasicScene }   from '../src/scene/BasicScene.js';
+
+        // === 1. Setup ===
+        const H = 8;
+        const skel  = new Skeleton(H);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({
+            background: 0x1a3344,             // tmavě modrá = "voda"
+            cameraHeight: 0,
+            cameraDistance: 18
+        });
+        scene.scene.add(view.group);
+
+        // CoM marker (užitečné pro vidění, jak se těžiště posouvá při tempech)
+        const FLOOR_Y = -H / 2;
+        const comMarker = view.createCenterOfMassMarker(FLOOR_Y - 100);  // mimo dohled (žádná podlaha)
+        // Skryjeme křížek a čáru (nemají smysl v plavání)
+        comMarker.userData.cross.visible = false;
+        comMarker.userData.line.visible = false;
+        scene.scene.add(comMarker);
+
+        // Vizuální "vodní hladina" — průhledná modrá rovina kousek nad postavou
+        const waterGeo = new THREE.PlaneGeometry(20, 20);
+        const waterMat = new THREE.MeshBasicMaterial({
+            color: 0x4488bb, transparent: true, opacity: 0.18, side: THREE.DoubleSide
+        });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = Math.PI / 2;       // do horizontální roviny
+        water.position.y = 1.5;               // nad postavou
+        scene.scene.add(water);
+
+        // Plavání nemá body opory — postava se vznáší
+        skel.supportPoints = [];
+
+        // === 2. Plavací styly ===
+        // Každý styl je funkce (skel, time) → void.
+        // Společné: přepíše rootRotation na požadované natočení, pak nastaví úhly cyklicky.
+
+        // 5 fází kraulu — keyframes per paže.
+        // Reference: kraul_paze_5_fazi.svg (boční pohled).
+        // u ∈ [0, 1) = phase v cyklu jedné paže (0 = entry).
+        //
+        // Asymetrie rychlosti: push (0.45 → 0.55) je nejkratší fáze cyklu = ruka
+        // zrychluje. Recovery (0.55 → 1.0) je nejdelší = uvolněný přenos.
+        //
+        // Sloupce:
+        //   sx = shoulder.x (předpažení/extense; po flipu na břicho = paže dolů/nad zády)
+        //   sz = shoulder.z (abdukce — malá v pull, velká v recovery → 3D oblouk)
+        //   ex = elbow.x   (ohyb — 0 v entry/push (natažená), 90+ v catch/pull/recovery)
+        const KRAUL_KEYFRAMES = [
+            // u     sx    sz    ex    fáze
+            { u: 0.00, sx: 165, sz: 25,  ex:  0  },   // 1 entry — paže klesá do vody, rovná
+            { u: 0.12, sx: 170, sz: 25,  ex: 90  },   // 2 catch — high elbow, předloktí svisle dolů
+            { u: 0.32, sx: 100, sz: 30,  ex: 95  },   // 3 pull — ruka pod tělem, ohyb ~90°
+            { u: 0.45, sx:   0, sz: 35,  ex: 60  },   // 3b transition pull→push
+            { u: 0.55, sx: -30, sz: 30,  ex: 10  },   // 4 push/exit — paže narovnaná, u boku
+            { u: 0.78, sx:  80, sz: 110, ex: 95  },   // 5 mid recovery — loket vede vysoko, paže ohnutá ven
+            { u: 1.00, sx: 165, sz: 25,  ex:  0  },   // wrap = entry
+        ];
+
+        // Lineární interpolace mezi keyframes podle u ∈ [0, 1).
+        // KISS: lineární, ne smoothstep — keyframes mají rozdílné rozestupy a samy
+        // určují asymetrickou rychlost.
+        function armAnglesAtPhase(u) {
+            // Wrap u do [0, 1) — JS modulo dává záporné výsledky pro záporné u
+            u = ((u % 1) + 1) % 1;
+            const kfs = KRAUL_KEYFRAMES;
+            for (let i = 0; i < kfs.length - 1; i++) {
+                if (u <= kfs[i + 1].u) {
+                    const a = kfs[i], b = kfs[i + 1];
+                    const tt = (u - a.u) / (b.u - a.u);
+                    return {
+                        sx: a.sx + (b.sx - a.sx) * tt,
+                        sz: a.sz + (b.sz - a.sz) * tt,
+                        ex: a.ex + (b.ex - a.ex) * tt,
+                    };
+                }
+            }
+            return kfs[kfs.length - 1];
+        }
+
+        function crawl(skel, time) {
+            // Postava na břiše — rootRotation.x = -90° (hlava míří -Z, lícem -Y do vody)
+            skel.rootRotation.x = -90;
+
+            // u_L ∈ [0, ∞) — phase levé paže. Tempo Hz = jeden cyklus paže za sekundu.
+            // Pravá paže má offset 0.45 (= 162°), ne 0.5 = front-quadrant timing.
+            // Důsledek: krátký moment, kdy je jedna paže v entry a druhá ještě dokončuje push.
+            const u_L = time * tempo;
+            const u_R = u_L + 0.45;
+
+            const aL = armAnglesAtPhase(u_L);
+            const aR = armAnglesAtPhase(u_R);
+
+            skel.setAngle('shoulderL', 'x', aL.sx);
+            skel.setAngle('shoulderL', 'z', aL.sz);
+            skel.setAngle('elbowL',    'x', aL.ex);
+
+            skel.setAngle('shoulderR', 'x', aR.sx);
+            skel.setAngle('shoulderR', 'z', aR.sz);
+            skel.setAngle('elbowR',    'x', aR.ex);
+
+            // Body roll — torso.y osciluje ±35° synchronně s pažemi.
+            // Když L paže je v mid-pull (u_L≈0.32), tělo má být rotováno na L stranu
+            // (= L rameno hluboko ve vodě = torso.y < 0). Plavecká teorie: ROTACE
+            // PŘEDBÍHÁ PAŽI o ~0.05 cyklu — tělo začne se otáčet o chvíli dřív.
+            const u_body = (u_L + 0.05) * 2 * Math.PI;
+            skel.setAngle('torso', 'y', -35 * Math.sin(u_body));
+
+            // Nohy — flutter kick (drobný kop, frekvence 2× tempo paží)
+            const kick = u_L * 4 * Math.PI;
+            skel.setAngle('hipL', 'x', Math.sin(kick) * 18);
+            skel.setAngle('hipR', 'x', Math.sin(kick + Math.PI) * 18);
+            skel.setAngle('kneeL', 'x', Math.max(0, Math.sin(kick + 0.5)) * 25);
+            skel.setAngle('kneeR', 'x', Math.max(0, Math.sin(kick + 0.5 + Math.PI)) * 25);
+
+            // Hlava — mírný předklon (lícem do vody). Body roll natáčí hlavu
+            // automaticky s torso, takže neck.z oscilace už není potřeba.
+            skel.setAngle('neck', 'x', 8);
+        }
+
+        function backstroke(skel, time) {
+            // Postava na zádech — rootRotation.x = +90° (dívá se nahoru)
+            skel.rootRotation.x = 90;
+            const t = time * tempo * Math.PI * 2;
+
+            // Paže nad hlavou — protiběžně (jedna jde nahoru, druhá tahá u boku)
+            skel.setAngle('shoulderL', 'x', -100 + Math.sin(t) * 70);
+            skel.setAngle('shoulderL', 'z', 25);
+            skel.setAngle('elbowL',    'x', 30);
+
+            skel.setAngle('shoulderR', 'x', -100 + Math.sin(t + Math.PI) * 70);
+            skel.setAngle('shoulderR', 'z', 25);
+            skel.setAngle('elbowR',    'x', 30);
+
+            // Nohy — flutter kick
+            const kick = t * 2;
+            skel.setAngle('hipL', 'x', Math.sin(kick) * 15);
+            skel.setAngle('hipR', 'x', Math.sin(kick + Math.PI) * 15);
+
+            skel.setAngle('neck', 'x', -10);    // hlava lehce zakloněná
+        }
+
+        function breaststroke(skel, time) {
+            // Postava na břiše
+            skel.rootRotation.x = -90;
+            const t = time * tempo * Math.PI * 2;
+
+            // Paže synchronně (oba dělají totéž): vysunutí dopředu, záběr do strany, návrat
+            const armPhase = (Math.sin(t) + 1) / 2;       // 0..1
+            const armForward = 30 + armPhase * 130;       // 30..160 (vpřed → vzpažení)
+            const armOut     = 60 - armPhase * 50;        // 60..10 (do strany → zavřené)
+            skel.setAngle('shoulderL', 'x', armForward);
+            skel.setAngle('shoulderL', 'z', armOut);
+            skel.setAngle('shoulderR', 'x', armForward);
+            skel.setAngle('shoulderR', 'z', armOut);
+            skel.setAngle('elbowL', 'x', 60 - armPhase * 60);
+            skel.setAngle('elbowR', 'x', 60 - armPhase * 60);
+
+            // Nohy — žabí kop (synchronně, opačná fáze než ruce)
+            const legPhase = (Math.sin(t + Math.PI) + 1) / 2;     // 0..1
+            const hipBend = legPhase * 80;                  // 0..80 (skrčit)
+            const hipOut  = legPhase * 40;                  // roznožka
+            const kneeBend = legPhase * 120;
+            skel.setAngle('hipL', 'x', hipBend);
+            skel.setAngle('hipL', 'z', hipOut);
+            skel.setAngle('hipR', 'x', hipBend);
+            skel.setAngle('hipR', 'z', hipOut);
+            skel.setAngle('kneeL', 'x', kneeBend);
+            skel.setAngle('kneeR', 'x', kneeBend);
+
+            skel.setAngle('neck', 'x', 12 - armPhase * 20);  // hlava nahoru pro nádech
+        }
+
+        const STYLES = {
+            crawl:   { name: 'Kraul',     fn: crawl },
+            back:    { name: 'Znak',      fn: backstroke },
+            breast:  { name: 'Prsa',      fn: breaststroke },
+        };
+
+        // === 3. Stav ===
+        let tempo = 1.0;
+        let currentFn = crawl;
+        let currentName = 'Kraul';
+
+        // === 4. UI ===
+        const ui = document.getElementById('controls');
+        const statsEl = document.getElementById('stats');
+        const buttons = {};
+
+        function activate(key) {
+            const s = STYLES[key];
+            skel.reset();
+            skel.supportPoints = [];        // bez opory
+            currentFn = s.fn;
+            currentName = s.name;
+            Object.values(buttons).forEach(b => b.classList.remove('active'));
+            buttons[key].classList.add('active');
+        }
+
+        Object.entries(STYLES).forEach(([key, s]) => {
+            const btn = document.createElement('button');
+            btn.textContent = s.name;
+            btn.addEventListener('click', () => activate(key));
+            ui.appendChild(btn);
+            buttons[key] = btn;
+        });
+
+        const tempoEl = document.getElementById('tempo');
+        const tempoVal = document.getElementById('tempoVal');
+        tempoEl.addEventListener('input', () => {
+            tempo = parseFloat(tempoEl.value);
+            tempoVal.textContent = tempo.toFixed(1) + ' Hz';
+        });
+
+        // === 5. Smyčka ===
+        scene.onUpdate((delta, time) => {
+            currentFn(skel, time);
+            view.update();
+            view.updateCenterOfMassMarker(comMarker, false);
+            // Stats
+            const com = skel.getCenterOfMass();
+            statsEl.innerHTML = `
+                <div><strong>Styl:</strong> ${currentName}</div>
+                <div><strong>Tempo:</strong> ${tempo.toFixed(1)} Hz</div>
+                <div><strong>CoM:</strong> x=${com.x.toFixed(2)}, y=${com.y.toFixed(2)}, z=${com.z.toFixed(2)}</div>
+                <div><strong>Orientace (root.x):</strong> ${skel.rootRotation.x}°</div>
+            `;
+        });
+        scene.start();
+        activate('crawl');
+    </script>
+</body>
+</html>

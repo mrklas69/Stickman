@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 10 — Inverse Kinematics</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #panel { position: absolute; top: 80px; left: 20px;
+                 background: #2a2a35; padding: 14px 18px;
+                 border-radius: 6px; border: 1px solid #444;
+                 width: 280px; z-index: 100; }
+        #panel h3 { margin: 0 0 10px 0; color: #ffaa66; font-size: 0.95em; }
+        .field { display: flex; align-items: center; margin: 6px 0; gap: 10px;
+                 font-size: 0.85em; }
+        .field label { width: 70px; }
+        .field input[type=range] { flex: 1; min-width: 0; accent-color: #44ff66; }
+        .field .v { width: 50px; font-family: monospace; color: #44ff66; text-align: right; }
+        #limbControls { position: absolute; top: 80px; right: 20px;
+                        display: flex; flex-direction: column; gap: 6px; z-index: 100; }
+        #limbControls button {
+            padding: 10px 18px; background: #2a2a35; color: #ddd;
+            border: 1px solid #444; border-radius: 6px; cursor: pointer;
+            font-size: 1em; min-width: 160px; text-align: left;
+        }
+        #limbControls button:hover  { background: #3a3a45; }
+        #limbControls button.active { background: #44ff66; color: #1a1a22; border-color: #44ff66; }
+        #stats { position: absolute; bottom: 10px; left: 10px;
+                 background: rgba(0,0,0,0.55); padding: 10px 14px;
+                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
+                 min-width: 240px; }
+        .out { color: #ff6644; }
+        .ok  { color: #44ff66; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 10 — Inverse Kinematics</h2>
+        <p>Posuvníky vlevo posunují zelený cíl. Vybraná končetina ho automaticky následuje.</p>
+    </div>
+
+    <div id="panel">
+        <h3>Cílová pozice</h3>
+        <div class="field">
+            <label>X</label>
+            <input id="tx" type="range" min="-6" max="6" step="0.1" value="3">
+            <span class="v" id="txVal">3.0</span>
+        </div>
+        <div class="field">
+            <label>Y</label>
+            <input id="ty" type="range" min="-4" max="6" step="0.1" value="2">
+            <span class="v" id="tyVal">2.0</span>
+        </div>
+        <div class="field">
+            <label>Z</label>
+            <input id="tz" type="range" min="-6" max="6" step="0.1" value="-1">
+            <span class="v" id="tzVal">-1.0</span>
+        </div>
+    </div>
+
+    <div id="limbControls"></div>
+    <div id="stats"></div>
+
+    <script type="module">
+        import * as THREE       from 'three';
+        import { Skeleton }     from '../src/model/Skeleton.js';
+        import { StickmanView } from '../src/view/StickmanView.js';
+        import { BasicScene }   from '../src/scene/BasicScene.js';
+        import { solveTwoBoneIK } from '../src/model/IK.js';
+
+        // === 1. Setup ===
+        const H = 8;
+        const FLOOR_Y = -H / 2;
+        const skel  = new Skeleton(H);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({
+            cameraHeight: 0, cameraDistance: 18,
+            floorY: FLOOR_Y,
+        });
+        scene.scene.add(view.group);
+
+        // Cílová sféra (zelená — postava se za ní natáhne)
+        const targetMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0x44ff66 })
+        );
+        scene.scene.add(targetMesh);
+
+        // Skutečná pozice koncového kloubu po IK (pomocná, pro porovnání s cílem)
+        const endMarker = new THREE.Mesh(
+            new THREE.SphereGeometry(0.10, 12, 12),
+            new THREE.MeshBasicMaterial({ color: 0xff6644 })
+        );
+        scene.scene.add(endMarker);
+
+        // === 2. Definice končetin (root → mid → end) ===
+        const LIMBS = {
+            armL: { name: 'Levá ruka',  root: 'shoulderL', mid: 'elbowL', end: 'wristL' },
+            armR: { name: 'Pravá ruka', root: 'shoulderR', mid: 'elbowR', end: 'wristR' },
+            legL: { name: 'Levá noha',  root: 'hipL',      mid: 'kneeL',  end: 'ankleL' },
+            legR: { name: 'Pravá noha', root: 'hipR',      mid: 'kneeR',  end: 'ankleR' },
+        };
+        let currentLimb = 'armR';
+
+        // Stav cíle
+        const target = { x: 3.0, y: 2.0, z: -1.0 };
+
+        // === 3. Aplikace IK + render ===
+        function update() {
+            // Aplikuj IK na vybranou končetinu
+            const limb = LIMBS[currentLimb];
+            const result = solveTwoBoneIK(skel, limb.root, limb.mid, limb.end, target);
+
+            // Refresh view + markery
+            view.update();
+            targetMesh.position.set(target.x, target.y, target.z);
+
+            // Pozice koncového kloubu po IK (musíme znovu spočítat world transforms,
+            // protože setAngle změnil úhly)
+            skel.computeWorldTransforms();
+            const endWP = skel.getJoint(limb.end).worldPosition;
+            endMarker.position.set(endWP.x, endWP.y, endWP.z);
+
+            // Stats
+            const reachable = result.distance <= result.reach + 0.001;
+            const error = Math.hypot(endWP.x - target.x, endWP.y - target.y, endWP.z - target.z);
+            statsEl.innerHTML = `
+                <div><strong>Končetina:</strong> ${limb.name}</div>
+                <div><strong>Cíl:</strong> (${target.x.toFixed(1)}, ${target.y.toFixed(1)}, ${target.z.toFixed(1)})</div>
+                <div><strong>Vzdálenost cíle od ramene/kyčle:</strong> ${result.distance.toFixed(2)}</div>
+                <div><strong>Max dosah:</strong> ${result.reach.toFixed(2)}
+                    <span class="${reachable ? 'ok' : 'out'}">
+                        ${reachable ? '(v dosahu)' : '(MIMO DOSAH)'}
+                    </span>
+                </div>
+                <div><strong>Chyba (end vs target):</strong> ${error.toFixed(3)}</div>
+            `;
+        }
+
+        // === 4. UI: tlačítka pro výběr končetiny ===
+        const limbsEl = document.getElementById('limbControls');
+        const buttons = {};
+        Object.entries(LIMBS).forEach(([key, limb]) => {
+            const btn = document.createElement('button');
+            btn.textContent = limb.name;
+            btn.addEventListener('click', () => {
+                // Reset úhly předchozí končetiny? Necháme tak (uvidíš historii)
+                currentLimb = key;
+                Object.values(buttons).forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                update();
+            });
+            limbsEl.appendChild(btn);
+            buttons[key] = btn;
+        });
+        buttons.armR.classList.add('active');
+
+        // === 5. UI: posuvníky cíle ===
+        const statsEl = document.getElementById('stats');
+        ['x', 'y', 'z'].forEach(ax => {
+            const slider = document.getElementById('t' + ax);
+            const label  = document.getElementById('t' + ax + 'Val');
+            slider.addEventListener('input', () => {
+                target[ax] = parseFloat(slider.value);
+                label.textContent = target[ax].toFixed(1);
+                update();
+            });
+        });
+
+        // Resetuj kostru a aplikuj IK pro výchozí stav
+        scene.onUpdate(() => view.update());
+        scene.start();
+        update();
+    </script>
+</body>
+</html>

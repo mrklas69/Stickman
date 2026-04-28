@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Stickman — rozcestník</title>
+    <style>
+        body { font-family: sans-serif; background: #1a1a22; color: #ddd;
+               padding: 40px 20px; max-width: 720px; margin: 0 auto;
+               line-height: 1.6; }
+        h1 { color: #ffaa66; }
+        h2 { color: #ddd; margin-top: 32px; border-bottom: 1px solid #444;
+             padding-bottom: 4px; }
+        a  { color: #88ccff; text-decoration: none; display: block;
+             padding: 12px 16px; background: #2a2a35; border-radius: 6px;
+             margin: 8px 0; }
+        a:hover    { background: #3a3a45; }
+        a strong   { color: #ffaa66; display: block; margin-bottom: 2px; }
+        a span     { opacity: 0.75; font-size: 0.9em; }
+        code  { background: #333; padding: 2px 6px; border-radius: 3px;
+                font-size: 0.9em; }
+        .note { background: #2a2a35; padding: 12px 16px; border-radius: 6px;
+                border-left: 3px solid #ffaa66; }
+    </style>
+</head>
+<body>
+    <h1>Stickman</h1>
+    <div class="note">
+        ES moduly potřebují HTTP server. Z této složky spusť:<br>
+        <code>python -m http.server 8000</code><br>
+        a pak otevři <code>http://localhost:8000/</code>.
+    </div>
+
+    <h2>Dema (ostrý kód)</h2>
+    <a href="demos/demo01_static.html">
+        <strong>Demo 01 — Statická rest pose</strong>
+        <span>Postava v anatomické nule. Ověření že model + view fungují.</span>
+    </a>
+    <a href="demos/demo02_poses.html">
+        <strong>Demo 02 — Pose presety</strong>
+        <span>Tlačítka pro Stand / T-pose / Sit / Wave / Squat. Ověří lokty a kolena.</span>
+    </a>
+    <a href="demos/demo03_playground.html">
+        <strong>Demo 03 — DOF playground</strong>
+        <span>Vlevo postava, vpravo posuvníky pro výšku H, root transformaci a všech 14 DOF.</span>
+    </a>
+    <a href="demos/demo04_animation.html">
+        <strong>Demo 04 — Procedurální animace</strong>
+        <span>Sin/cos cykly v reálném čase: idle, dýchání, mávání, tanec, dřepy.</span>
+    </a>
+    <a href="demos/demo05_com.html">
+        <strong>Demo 05 — Center of Mass</strong>
+        <span>Vážené těžiště kostí + jeho horizontální projekce na podlahu.</span>
+    </a>
+    <a href="demos/demo06_stability.html">
+        <strong>Demo 06 — Body opory &amp; stabilita</strong>
+        <span>Podpůrný polygon, indikátor stability (zelený = stabilní, červený = padá).</span>
+    </a>
+    <a href="demos/demo07_snap.html">
+        <strong>Demo 07 — Snap k podlaze</strong>
+        <span>Snap on/off: postava se drží podlahy bez ohledu na pózu (squat klesá, lunge se přizpůsobí).</span>
+    </a>
+    <a href="demos/demo08_lerp.html">
+        <strong>Demo 08 — Pose interpolace</strong>
+        <span>Plynulé přechody mezi pózami (Pose.lerp + smoothstep), nastavitelná doba.</span>
+    </a>
+    <a href="demos/demo09_walk.html">
+        <strong>Demo 09 — Chůze</strong>
+        <span>Cyklický pohyb nohou + ruce v protisměru, support points přepínají v rytmu kroku.</span>
+    </a>
+    <a href="demos/demo10_ik.html">
+        <strong>Demo 10 — Inverse Kinematics</strong>
+        <span>2-bone IK: posuvníky cíle, vybraná končetina (paže nebo noha) ho automaticky následuje.</span>
+    </a>
+    <a href="demos/demo11_swim.html">
+        <strong>Demo 11 — Plavání</strong>
+        <span>Postava horizontálně (rootRotation), tři styly: kraul, znak, prsa.</span>
+    </a>
+    <a href="demos/demo12_climb.html">
+        <strong>Demo 12 — Šplhání</strong>
+        <span>Postava na žebříku, cyklus přemístění 4 končetin, posun root.y nahoru.</span>
+    </a>
+    <a href="demos/demo13_ikwalk.html">
+        <strong>Demo 13 — Chůze v0.2 (IK)</strong>
+        <span>Stojná noha drží ankle nehybný (IK), postava se posouvá vpřed jako reálný krok.</span>
+    </a>
+    <a href="demos/demo14_headsupport.html">
+        <strong>Demo 14 — Hlava jako bod opory</strong>
+        <span>Pincha (hlava + lokty) vs. Kapalásana (hlava + dlaně). Tripod stability.</span>
+    </a>
+
+    <h2>Scratch (pomocné soubory, mimo architekturu)</h2>
+    <a href=".source/stickman.html">
+        <strong>Původní prototyp s akváriem</strong>
+        <span>Výchozí inspirace.</span>
+    </a>
+</body>
+</html>

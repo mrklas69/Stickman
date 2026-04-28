@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 09 — Chůze</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #panel { position: absolute; top: 80px; left: 20px;
+                 background: #2a2a35; padding: 14px 18px;
+                 border-radius: 6px; border: 1px solid #444;
+                 width: 260px; z-index: 100; }
+        #panel h3 { margin: 0 0 10px 0; color: #ffaa66; font-size: 0.95em; }
+        .field { display: flex; align-items: center; margin: 8px 0; gap: 10px;
+                 font-size: 0.85em; }
+        .field label { width: 90px; }
+        .field input[type=range] { flex: 1; min-width: 0; accent-color: #ffaa66; }
+        .field .v { width: 50px; font-family: monospace; color: #88ccff; text-align: right; }
+        .toggle { display: flex; align-items: center; gap: 8px; margin: 10px 0;
+                  cursor: pointer; user-select: none; }
+        .toggle .led { width: 12px; height: 12px; border-radius: 50%;
+                       background: #444; border: 1px solid #666; }
+        .toggle.on .led { background: #44ff66; border-color: #44ff66;
+                          box-shadow: 0 0 6px #44ff66; }
+        button.act { width: 100%; padding: 10px; background: #444; color: #fff;
+                     border: 0; border-radius: 4px; cursor: pointer; margin-top: 10px;
+                     font-size: 0.9em; }
+        button.act:hover { background: #ffaa66; color: #1a1a22; }
+        #stats { position: absolute; bottom: 10px; left: 10px;
+                 background: rgba(0,0,0,0.55); padding: 10px 14px;
+                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
+                 min-width: 240px; }
+        .ok  { color: #44ff66; font-weight: bold; }
+        .bad { color: #ff4444; font-weight: bold; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 09 — Chůze</h2>
+        <p>Cyklický pohyb nohou (swing + stance), ruce protisměrně, support points přepínají v rytmu kroku.</p>
+    </div>
+
+    <div id="panel">
+        <h3>Walking parameters</h3>
+        <div class="field">
+            <label>Tempo</label>
+            <input id="tempo" type="range" min="0.2" max="2.0" step="0.1" value="0.8">
+            <span class="v" id="tempoVal">0.8 Hz</span>
+        </div>
+        <div class="field">
+            <label>Rozkrok</label>
+            <input id="amp" type="range" min="10" max="60" step="2" value="35">
+            <span class="v" id="ampVal">35°</span>
+        </div>
+        <div class="field">
+            <label>Zdvih kol.</label>
+            <input id="knee" type="range" min="0" max="120" step="5" value="70">
+            <span class="v" id="kneeVal">70°</span>
+        </div>
+        <div class="toggle on" id="armToggle">
+            <div class="led"></div><span>Ruce v protisměru</span>
+        </div>
+        <div class="toggle on" id="snapToggle">
+            <div class="led"></div><span>Snap to floor</span>
+        </div>
+        <button class="act" id="pauseBtn">Pauza</button>
+    </div>
+
+    <div id="stats"></div>
+
+    <script type="module">
+        import * as THREE       from 'three';
+        import { Skeleton }     from '../src/model/Skeleton.js';
+        import { StickmanView } from '../src/view/StickmanView.js';
+        import { BasicScene }   from '../src/scene/BasicScene.js';
+
+        // === 1. Setup ===
+        const H = 8;
+        const FLOOR_Y = -H / 2;
+        const skel  = new Skeleton(H);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({
+            cameraHeight: 0, cameraDistance: 18,
+            floorY: FLOOR_Y,
+        });
+        scene.scene.add(view.group);
+
+        const comMarker     = view.createCenterOfMassMarker(FLOOR_Y);
+        const supportMarker = view.createSupportPolygonMarker(FLOOR_Y);
+        scene.scene.add(comMarker);
+        scene.scene.add(supportMarker);
+
+        // === 2. Parametry chůze ===
+        // Tempo = kolik kompletních kroků za sekundu (1 cyklus = krok L + krok P)
+        let tempo       = 0.8;          // Hz
+        let stepAmp     = 35;           // ° max předkop kyčle
+        let kneeLift    = 70;           // ° max ohyb kolena při swing
+        let armSwing    = true;         // ruce v protipohybu
+        let snapEnabled = true;
+        let paused      = false;
+
+        // === 3. Walking animace ===
+        // Chůze = cyklus phase ∈ [0,1).
+        // Levá noha:
+        //   phase ∈ [0, 0.5]  → SWING (zvedá se, jde vpřed)
+        //   phase ∈ [0.5, 1]  → STANCE (na zemi, jde "vzad" relativně k tělu)
+        // Pravá noha = posunutá o 0.5 (opačná fáze).
+        // Sin(πt) tvaruje swing — plynulé zvednutí.
+        function legPose(ph) {
+            // ph ∈ [0,1] pro tuto nohu (vlastní fáze)
+            if (ph < 0.5) {
+                // SWING
+                const t = ph * 2;                      // 0..1
+                const lift = Math.sin(t * Math.PI);    // 0 → 1 → 0
+                return {
+                    hip:  -stepAmp + 2 * stepAmp * t,  // -amp → +amp lineárně
+                    knee: kneeLift * lift,             // koleno se ohne v půli swingu
+                };
+            } else {
+                // STANCE — noha je narovnaná, jde vzad
+                const t = (ph - 0.5) * 2;              // 0..1
+                return {
+                    hip:  stepAmp - 2 * stepAmp * t,   // +amp → -amp
+                    knee: 0,
+                };
+            }
+        }
+
+        // Jeden frame chůze
+        function applyWalkingPose(time) {
+            // Phase v ose času, modulo 1 (= jeden krok = 1/tempo sekundy)
+            const phaseL = (time * tempo) % 1;
+            const phaseR = (phaseL + 0.5) % 1;
+
+            const L = legPose(phaseL);
+            const R = legPose(phaseR);
+
+            skel.setAngle('hipL',  'x', L.hip);
+            skel.setAngle('kneeL', 'x', L.knee);
+            skel.setAngle('hipR',  'x', R.hip);
+            skel.setAngle('kneeR', 'x', R.knee);
+
+            // Ruce v protipohybu — svalují se jako kontraváha k nohám
+            // Levá ruka jde s pravou nohou a naopak
+            if (armSwing) {
+                skel.setAngle('shoulderL', 'x', -R.hip * 0.6);
+                skel.setAngle('shoulderR', 'x', -L.hip * 0.6);
+                skel.setAngle('elbowL', 'x', 25);
+                skel.setAngle('elbowR', 'x', 25);
+            } else {
+                skel.setAngle('shoulderL', 'x', 0);
+                skel.setAngle('shoulderR', 'x', 0);
+                skel.setAngle('elbowL', 'x', 0);
+                skel.setAngle('elbowR', 'x', 0);
+            }
+
+            // Lehké houpání trupu (mírný předklon v rytmu kroku)
+            skel.setAngle('neck', 'x', 5);
+
+            // Support points — která noha je STANCE?
+            // L stance = phaseL ∈ [0.5, 1) → support = ankleL
+            // R stance = phaseR ∈ [0.5, 1) → support = ankleR
+            // Mezi tím (oba kotníky blízko podlahy) — přibližně double support, ale my volíme jeden
+            skel.supportPoints = (phaseL >= 0.5) ? ['ankleL'] : ['ankleR'];
+        }
+
+        // === 4. Smyčka ===
+        let pausedTime = 0;          // čas v okamžiku pauzy (kvůli "wall clock vs animation clock")
+        let animTime  = 0;
+        scene.onUpdate((delta, time) => {
+            if (!paused) {
+                animTime += delta;
+                applyWalkingPose(animTime);
+                if (snapEnabled) skel.snapToFloor(FLOOR_Y);
+            }
+            view.update();
+            view.updateCenterOfMassMarker(comMarker, true);
+            view.updateSupportPolygonMarker(supportMarker);
+            updateStats();
+        });
+
+        function updateStats() {
+            const stable = skel.isStable();
+            const com = skel.getCenterOfMass();
+            const phaseL = (animTime * tempo) % 1;
+            const stage = (phaseL < 0.5) ? 'L SWING / R stance' : 'L STANCE / R swing';
+            statsEl.innerHTML = `
+                <div><strong>Phase L:</strong> ${phaseL.toFixed(2)}  (${stage})</div>
+                <div><strong>Support:</strong> ${skel.supportPoints.join(', ')}</div>
+                <div><strong>Stabilita:</strong>
+                    <span class="${stable ? 'ok' : 'bad'}">${stable ? 'STABILNÍ' : 'PADÁ'}</span>
+                </div>
+                <div><strong>CoM (xz):</strong> x=${com.x.toFixed(2)}, z=${com.z.toFixed(2)}</div>
+            `;
+        }
+
+        // === 5. UI ===
+        const statsEl = document.getElementById('stats');
+        const tempoEl = document.getElementById('tempo');
+        const tempoVal = document.getElementById('tempoVal');
+        tempoEl.addEventListener('input', () => {
+            tempo = parseFloat(tempoEl.value);
+            tempoVal.textContent = tempo.toFixed(1) + ' Hz';
+        });
+
+        const ampEl = document.getElementById('amp');
+        const ampVal = document.getElementById('ampVal');
+        ampEl.addEventListener('input', () => {
+            stepAmp = parseFloat(ampEl.value);
+            ampVal.textContent = stepAmp + '°';
+        });
+
+        const kneeEl = document.getElementById('knee');
+        const kneeValEl = document.getElementById('kneeVal');
+        kneeEl.addEventListener('input', () => {
+            kneeLift = parseFloat(kneeEl.value);
+            kneeValEl.textContent = kneeLift + '°';
+        });
+
+        const armToggle = document.getElementById('armToggle');
+        armToggle.addEventListener('click', () => {
+            armSwing = !armSwing;
+            armToggle.classList.toggle('on', armSwing);
+        });
+
+        const snapToggle = document.getElementById('snapToggle');
+        snapToggle.addEventListener('click', () => {
+            snapEnabled = !snapEnabled;
+            snapToggle.classList.toggle('on', snapEnabled);
+        });
+
+        const pauseBtn = document.getElementById('pauseBtn');
+        pauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? 'Pokračovat' : 'Pauza';
+        });
+
+        scene.start();
+    </script>
+</body>
+</html>

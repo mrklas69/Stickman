@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 12 — Šplhání</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #panel { position: absolute; top: 80px; left: 20px;
+                 background: #2a2a35; padding: 12px 16px;
+                 border-radius: 6px; border: 1px solid #444;
+                 width: 220px; z-index: 100; }
+        .field { display: flex; align-items: center; margin: 6px 0; gap: 10px;
+                 font-size: 0.85em; }
+        .field label { width: 70px; }
+        .field input[type=range] { flex: 1; min-width: 0; accent-color: #886644; }
+        .field .v { width: 50px; font-family: monospace; color: #88ccff; text-align: right; }
+        button.act { width: 100%; padding: 10px; background: #444; color: #fff;
+                     border: 0; border-radius: 4px; cursor: pointer; margin-top: 10px;
+                     font-size: 0.9em; }
+        button.act:hover { background: #886644; color: #fff; }
+        #stats { position: absolute; bottom: 10px; left: 10px;
+                 background: rgba(0,0,0,0.55); padding: 10px 14px;
+                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
+                 min-width: 240px; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 12 — Šplhání</h2>
+        <p>Postava se drží 4 bodů (ruce nahoře, nohy dole). V cyklu jednu uvolní, posune, zase chytne.</p>
+    </div>
+
+    <div id="panel">
+        <div class="field">
+            <label>Tempo</label>
+            <input id="tempo" type="range" min="0.2" max="2.0" step="0.1" value="0.8">
+            <span class="v" id="tempoVal">0.8 Hz</span>
+        </div>
+        <div class="field">
+            <label>Rychlost</label>
+            <input id="speed" type="range" min="0" max="2" step="0.1" value="0.6">
+            <span class="v" id="speedVal">0.6</span>
+        </div>
+        <button class="act" id="resetBtn">Reset výšky</button>
+        <button class="act" id="pauseBtn">Pauza</button>
+    </div>
+
+    <div id="stats"></div>
+
+    <script type="module">
+        import * as THREE       from 'three';
+        import { Skeleton }     from '../src/model/Skeleton.js';
+        import { StickmanView } from '../src/view/StickmanView.js';
+        import { BasicScene }   from '../src/scene/BasicScene.js';
+
+        // === 1. Setup ===
+        const H = 8;
+        const skel  = new Skeleton(H);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({ cameraHeight: 0, cameraDistance: 18 });
+        scene.scene.add(view.group);
+
+        // === 2. Žebřík (vertikální čáry + horizontální příčky) ===
+        // Žebřík jde od y=-12 do y=+30. Boky na X = ±0.6 (= šířka ramen).
+        const ladderGroup = new THREE.Group();
+        const ladderMat = new THREE.LineBasicMaterial({ color: 0x886644 });
+        const LADDER_X = 0.6;
+
+        // Dvě vertikální tyče
+        for (const x of [-LADDER_X, LADDER_X]) {
+            const geo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(x, -12, 0),
+                new THREE.Vector3(x, 30, 0),
+            ]);
+            ladderGroup.add(new THREE.Line(geo, ladderMat));
+        }
+        // Příčky každých 0.6 jednotky
+        for (let y = -12; y <= 30; y += 0.6) {
+            const geo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-LADDER_X, y, 0),
+                new THREE.Vector3(LADDER_X, y, 0),
+            ]);
+            ladderGroup.add(new THREE.Line(geo, ladderMat));
+        }
+        scene.scene.add(ladderGroup);
+
+        // === 3. CoM marker (jen sféra — křížek/čára pro šplh nedávají smysl, podlaha není) ===
+        const comMarker = view.createCenterOfMassMarker(-100);   // floorY mimo dohled
+        comMarker.userData.cross.visible = false;
+        comMarker.userData.line.visible = false;
+        scene.scene.add(comMarker);
+
+        // === 4. Šplhací pose ===
+        // Základní stav: paže nad hlavu (anatomic x = 175°), lokty narovnané (10°),
+        // nohy mírně pokrčené (kyčle 35°, kolena 50°). Tělo je přitisknuté ke žebříku.
+        function applyClimbPose() {
+            skel.setAngle('shoulderL', 'x', 175);
+            skel.setAngle('shoulderL', 'z', 5);
+            skel.setAngle('shoulderR', 'x', 175);
+            skel.setAngle('shoulderR', 'z', 5);
+            skel.setAngle('elbowL', 'x', 10);
+            skel.setAngle('elbowR', 'x', 10);
+
+            skel.setAngle('hipL', 'x', 35);
+            skel.setAngle('hipR', 'x', 35);
+            skel.setAngle('kneeL', 'x', 50);
+            skel.setAngle('kneeR', 'x', 50);
+
+            skel.setAngle('neck', 'x', -10);   // hlava nahoru ke žebříku
+        }
+
+        // Cyklus přemístění končetin: 4 fáze po 1/4 cyklu
+        // Fáze 0: L ruka nahoru; 1: R ruka; 2: L noha; 3: R noha
+        function applyClimbCycle(time) {
+            applyClimbPose();   // základ
+            const phase = (time * tempo) % 1;
+            const phase4 = phase * 4;             // 0..4
+            const stage = Math.floor(phase4);     // 0,1,2,3
+            const local = phase4 - stage;          // 0..1 uvnitř fáze
+            const swing = Math.sin(local * Math.PI);  // 0 → 1 → 0 (zvedne a vrátí)
+
+            // Aktivní končetina v této fázi se "uvolní a posune výš/víc pokrčená"
+            switch (stage) {
+                case 0:  // L ruka uvolněná
+                    skel.setAngle('elbowL', 'x', 10 + 80 * swing);
+                    skel.setAngle('shoulderL', 'x', 175 - 5 * swing);
+                    skel.supportPoints = ['wristR', 'ankleL', 'ankleR'];
+                    break;
+                case 1:  // R ruka uvolněná
+                    skel.setAngle('elbowR', 'x', 10 + 80 * swing);
+                    skel.setAngle('shoulderR', 'x', 175 - 5 * swing);
+                    skel.supportPoints = ['wristL', 'ankleL', 'ankleR'];
+                    break;
+                case 2:  // L noha uvolněná
+                    skel.setAngle('hipL', 'x', 35 + 50 * swing);
+                    skel.setAngle('kneeL', 'x', 50 + 60 * swing);
+                    skel.supportPoints = ['wristL', 'wristR', 'ankleR'];
+                    break;
+                case 3:  // R noha uvolněná
+                    skel.setAngle('hipR', 'x', 35 + 50 * swing);
+                    skel.setAngle('kneeR', 'x', 50 + 60 * swing);
+                    skel.supportPoints = ['wristL', 'wristR', 'ankleL'];
+                    break;
+            }
+        }
+
+        // === 5. Stav animace ===
+        let tempo = 0.8;
+        let speed = 0.6;        // jednotek/s (rychlost stoupání)
+        let paused = false;
+        let animTime = 0;
+        let climbHeight = 0;    // posun root.y nahoru
+
+        // Postava startuje "nízko" — pelvis na y=0, žebřík kolem ní
+        skel.rootPosition.y = 0;
+
+        // === 6. Smyčka ===
+        // statsEl deklarujeme tady (před scene.start), aby byl dostupný v callbacku
+        const statsEl = document.getElementById('stats');
+        scene.onUpdate((delta, time) => {
+            if (!paused) {
+                animTime += delta;
+                climbHeight += speed * delta;
+                skel.rootPosition.y = climbHeight;
+                applyClimbCycle(animTime);
+            }
+            view.update();
+            view.updateCenterOfMassMarker(comMarker, false);
+
+            // Sledování kamery — target.y = postava
+            scene.controls.target.y = climbHeight;
+            scene.camera.position.y = climbHeight;
+
+            // Stats
+            const phase = (animTime * tempo) % 1;
+            const phase4 = phase * 4;
+            const stage = Math.floor(phase4);
+            const stageNames = ['L ruka výš', 'R ruka výš', 'L noha výš', 'R noha výš'];
+            const com = skel.getCenterOfMass();
+            statsEl.innerHTML = `
+                <div><strong>Aktuální fáze:</strong> ${stageNames[stage]}</div>
+                <div><strong>Drží se:</strong> ${skel.supportPoints.join(', ')}</div>
+                <div><strong>Výška:</strong> ${climbHeight.toFixed(2)} jednotek</div>
+                <div><strong>CoM:</strong> x=${com.x.toFixed(2)}, y=${com.y.toFixed(2)}</div>
+            `;
+        });
+        scene.start();
+
+        // === 7. UI ===
+        document.getElementById('tempo').addEventListener('input', e => {
+            tempo = parseFloat(e.target.value);
+            document.getElementById('tempoVal').textContent = tempo.toFixed(1) + ' Hz';
+        });
+        document.getElementById('speed').addEventListener('input', e => {
+            speed = parseFloat(e.target.value);
+            document.getElementById('speedVal').textContent = speed.toFixed(1);
+        });
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            climbHeight = 0;
+            animTime = 0;
+        });
+        const pauseBtn = document.getElementById('pauseBtn');
+        pauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? 'Pokračovat' : 'Pauza';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 13 — Chůze v0.2 (IK)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #panel { position: absolute; top: 80px; left: 20px;
+                 background: #2a2a35; padding: 14px 18px;
+                 border-radius: 6px; border: 1px solid #444;
+                 width: 240px; z-index: 100; }
+        #panel h3 { margin: 0 0 10px 0; color: #ffaa66; font-size: 0.95em; }
+        .field { display: flex; align-items: center; margin: 6px 0; gap: 10px;
+                 font-size: 0.85em; }
+        .field label { width: 90px; }
+        .field input[type=range] { flex: 1; min-width: 0; accent-color: #ffaa66; }
+        .field .v { width: 50px; font-family: monospace; color: #88ccff; text-align: right; }
+        button.act { width: 100%; padding: 10px; background: #444; color: #fff;
+                     border: 0; border-radius: 4px; cursor: pointer; margin-top: 10px;
+                     font-size: 0.9em; }
+        button.act:hover { background: #ffaa66; color: #1a1a22; }
+        #stats { position: absolute; bottom: 10px; left: 10px;
+                 background: rgba(0,0,0,0.55); padding: 10px 14px;
+                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
+                 min-width: 260px; }
+        .ok  { color: #44ff66; font-weight: bold; }
+        .bad { color: #ff4444; font-weight: bold; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 13 — Chůze v0.2 (IK pro stance nohu)</h2>
+        <p>Stojná noha drží ankle nehybný v prostoru. Postava se posouvá vpřed, IK přepočítává hip+knee.</p>
+    </div>
+
+    <div id="panel">
+        <h3>Walk parameters</h3>
+        <div class="field">
+            <label>Tempo</label>
+            <input id="tempo" type="range" min="0.3" max="2.0" step="0.1" value="0.7">
+            <span class="v" id="tempoVal">0.7 Hz</span>
+        </div>
+        <div class="field">
+            <label>Délka kroku</label>
+            <input id="step" type="range" min="0.5" max="3.0" step="0.1" value="1.6">
+            <span class="v" id="stepVal">1.6</span>
+        </div>
+        <div class="field">
+            <label>Zdvih sw.</label>
+            <input id="lift" type="range" min="0.2" max="2.0" step="0.1" value="0.7">
+            <span class="v" id="liftVal">0.7</span>
+        </div>
+        <button class="act" id="pauseBtn">Pauza</button>
+    </div>
+
+    <div id="stats"></div>
+
+    <script type="module">
+        import * as THREE         from 'three';
+        import { Skeleton }       from '../src/model/Skeleton.js';
+        import { StickmanView }   from '../src/view/StickmanView.js';
+        import { BasicScene }     from '../src/scene/BasicScene.js';
+        import { solveTwoBoneIK } from '../src/model/IK.js';
+
+        // === 1. Setup ===
+        const H = 8;
+        const FLOOR_Y = -H / 2;
+        const skel  = new Skeleton(H);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({
+            cameraHeight: 0, cameraDistance: 18,
+            floorY: FLOOR_Y,
+        });
+        scene.scene.add(view.group);
+
+        const supportMarker = view.createSupportPolygonMarker(FLOOR_Y);
+        scene.scene.add(supportMarker);
+
+        // Vizuální značky footprintů (kde se noha položila)
+        const footprintMat = new THREE.MeshBasicMaterial({ color: 0xffaa44 });
+        const footprintGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        function spawnFootprint(pos) {
+            const m = new THREE.Mesh(footprintGeo, footprintMat);
+            m.position.set(pos.x, FLOOR_Y + 0.02, pos.z);
+            scene.scene.add(m);
+        }
+
+        // === 2. Walking model ===
+        // KLÍČOVÝ PRINCIP: pro každou nohu držíme "anchor" — world pozici, kde má
+        // ankle aktuálně být. Pro stance nohu je anchor FIXED. Pro swing nohu se
+        // anchor pohybuje po parabolce z předchozí stance pozice na novou.
+        // Pak voláme IK: solveTwoBoneIK(skel, hip, knee, ankle, anchor).
+        //
+        // Postava se posouvá vpřed v root.z plynule. Stance noha tak relativně
+        // "klouže" dozadu vůči tělu — IK to řeší ohýbáním kyčle a kolena.
+
+        let tempo      = 0.7;        // Hz (kroků za sekundu, kde 1 krok = jedna noha cyklem)
+        let stepLength = 1.6;        // jednotek (jak daleko noha dosáhne v swingu)
+        let stepLift   = 0.7;        // jednotek (jak vysoko se noha zvedne v polovině swing)
+        let paused     = false;
+
+        // Cykl: phase ∈ [0, 1)
+        //   L noha: phase ∈ [0, 0.5] = SWING; [0.5, 1) = STANCE
+        //   R noha: opačně (offset 0.5)
+        // Anchor pozice: pro stance je nastavena na začátku stance fáze a drží se;
+        // pro swing interpoluje od posledního stance po nový (vpřed o 2*stepLength).
+
+        const ankleAnchor = {
+            L: { x: -skel.proportions.HIP_X, y: FLOOR_Y, z: 0 },
+            R: { x:  skel.proportions.HIP_X, y: FLOOR_Y, z: 0 },
+        };
+        const lastStancePos = {  // poslední pozice, kde stála noha (= start swing)
+            L: { ...ankleAnchor.L },
+            R: { ...ankleAnchor.R },
+        };
+        let lastStage = { L: -1, R: -1 };  // pro detekci přechodu fází
+
+        let animTime = 0;
+        const startZ = 0;          // root start
+
+        function updateLeg(side, phase, time) {
+            // phase ∈ [0, 1) pro tuto nohu
+            const inSwing  = phase < 0.5;
+            const stage    = inSwing ? 0 : 1;
+
+            // Detekce přechodu fáze (= konec swing → začátek stance)
+            if (stage !== lastStage[side]) {
+                if (stage === 1) {
+                    // Začínáme STANCE — noha se právě "položila".
+                    // Anchor = aktuální IK pozice (předem dopočítaná v posledním swing framu).
+                    lastStancePos[side] = { ...ankleAnchor[side] };
+                    spawnFootprint(ankleAnchor[side]);
+                }
+                lastStage[side] = stage;
+            }
+
+            if (inSwing) {
+                // SWING: interpoluj anchor od poslední stance po novou cílovou.
+                // Cílová pozice = lastStancePos.z - 2 * stepLength
+                // (postava míří dopředu = do -Z, takže "vpřed" = z mínus)
+                const t = phase * 2;          // 0..1 v rámci swing
+                const startPos = lastStancePos[side];
+                const targetZ  = startPos.z - 2 * stepLength;
+                // Lineární horizontální interpolace + parabolický zdvih ve Y
+                const newZ = startPos.z + (targetZ - startPos.z) * t;
+                const lift = Math.sin(t * Math.PI) * stepLift;
+                ankleAnchor[side].x = startPos.x;
+                ankleAnchor[side].y = FLOOR_Y + lift;
+                ankleAnchor[side].z = newZ;
+            } else {
+                // STANCE: anchor je fixed (= lastStancePos)
+                ankleAnchor[side].x = lastStancePos[side].x;
+                ankleAnchor[side].y = lastStancePos[side].y;
+                ankleAnchor[side].z = lastStancePos[side].z;
+            }
+
+            // IK: vyřeš hip + knee aby ankle byl na anchor
+            solveTwoBoneIK(skel,
+                'hip'  + side,
+                'knee' + side,
+                'ankle' + side,
+                ankleAnchor[side]
+            );
+        }
+
+        function updateWalk(delta) {
+            // Postava se posouvá vpřed (do -Z) plynulou rychlostí
+            const walkSpeed = stepLength * tempo * 2;  // jednotek/s
+            skel.rootPosition.z -= walkSpeed * delta;
+
+            // Phase v cyklu
+            const phaseL = (animTime * tempo) % 1;
+            const phaseR = (phaseL + 0.5) % 1;
+
+            // Aplikuj základní pose (paže v protisměru) — IK přepíše nohy
+            const armSwingAmp = 25;
+            // Levá ruka jde s pravou nohou: phase 0..0.5 R swing → L ruka vpřed
+            skel.setAngle('shoulderL', 'x', Math.sin(phaseR * Math.PI * 2) * armSwingAmp);
+            skel.setAngle('shoulderR', 'x', Math.sin(phaseL * Math.PI * 2) * armSwingAmp);
+            skel.setAngle('elbowL', 'x', 25);
+            skel.setAngle('elbowR', 'x', 25);
+            skel.setAngle('neck', 'x', 5);
+
+            // Aplikuj IK pro každou nohu
+            updateLeg('L', phaseL, animTime);
+            updateLeg('R', phaseR, animTime);
+
+            // Support points — stance noha (přesněji jen ta, která je v stance fázi).
+            // Pokud obě by mohly být support (přechod), volíme tu která začala stance dřív.
+            const lInStance = phaseL >= 0.5;
+            const rInStance = phaseR >= 0.5;
+            if (lInStance && rInStance) {
+                skel.supportPoints = ['ankleL', 'ankleR'];
+            } else if (lInStance) {
+                skel.supportPoints = ['ankleL'];
+            } else {
+                skel.supportPoints = ['ankleR'];
+            }
+
+            // Snap to floor — drží Y nejnižší support nad podlahou.
+            // Tady ale anchor.y už přesně leží na FLOOR_Y (+ lift v swing),
+            // takže snap to floor by jen kompensoval drobné odchylky.
+            // Vypustíme — stance ankle je z definice na FLOOR_Y (anchor.y = FLOOR_Y).
+        }
+
+        // === 3. Smyčka ===
+        // statsEl deklarujeme tady (před scene.start), aby byl dostupný v callbacku
+        const statsEl = document.getElementById('stats');
+        scene.onUpdate((delta, time) => {
+            if (!paused) {
+                animTime += delta;
+                updateWalk(delta);
+            }
+            view.update();
+            view.updateSupportPolygonMarker(supportMarker);
+
+            // Kamera sleduje postavu po Z (lateral tracking)
+            scene.controls.target.z = skel.rootPosition.z;
+            // Kamera zachová její odsazení od cíle
+            scene.camera.position.z = skel.rootPosition.z - 18;
+
+            // Stats
+            const phaseL = (animTime * tempo) % 1;
+            statsEl.innerHTML = `
+                <div><strong>Phase L:</strong> ${phaseL.toFixed(2)}</div>
+                <div><strong>L ankle anchor:</strong> z=${ankleAnchor.L.z.toFixed(2)} (${phaseL < 0.5 ? 'SWING' : 'STANCE'})</div>
+                <div><strong>R ankle anchor:</strong> z=${ankleAnchor.R.z.toFixed(2)} (${phaseL >= 0.5 ? 'SWING' : 'STANCE'})</div>
+                <div><strong>Root.z:</strong> ${skel.rootPosition.z.toFixed(2)}</div>
+                <div><strong>Support:</strong> ${skel.supportPoints.join(', ')}</div>
+            `;
+        });
+        scene.start();
+
+        // === 4. UI ===
+        document.getElementById('tempo').addEventListener('input', e => {
+            tempo = parseFloat(e.target.value);
+            document.getElementById('tempoVal').textContent = tempo.toFixed(1) + ' Hz';
+        });
+        document.getElementById('step').addEventListener('input', e => {
+            stepLength = parseFloat(e.target.value);
+            document.getElementById('stepVal').textContent = stepLength.toFixed(1);
+        });
+        document.getElementById('lift').addEventListener('input', e => {
+            stepLift = parseFloat(e.target.value);
+            document.getElementById('liftVal').textContent = stepLift.toFixed(1);
+        });
+        const pauseBtn = document.getElementById('pauseBtn');
+        pauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? 'Pokračovat' : 'Pauza';
+        });
+    </script>
+</body>
+</html>

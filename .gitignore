@@ -1,0 +1,14 @@
+# Claude Code per-project metadata (auto-memory, lokální nastavení)
+.claude/projects/
+.claude/settings.local.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Editor backups
+*.bak
+*.swp
+*~
