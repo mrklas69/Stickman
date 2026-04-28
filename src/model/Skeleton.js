@@ -426,7 +426,7 @@ export class Skeleton {
      * - 0 bodů: nestabilní vždy
      * - 1 bod: stabilní pokud distance(CoM_xz, point_xz) <= tolerance (= "velikost chodidla")
      * - 2 body: stabilní pokud distance od úsečky AB v rovině XZ <= tolerance
-     * - 3+ bodů: zjednodušeně testujeme blízkost centroidu (TODO: convex hull point-in-polygon)
+     * - 3+ bodů: convex hull v rovině XZ + point-in-polygon test (s tolerance jako rozšíření)
      *
      * @param {number} [tolerance] - rozšíření polygonu (default = 0.04 × H, "velikost chodidla")
      */
