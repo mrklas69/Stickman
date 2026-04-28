@@ -24,14 +24,15 @@ Sloučí dema 01+02+03+05+07 do jedné stránky. Root **fixní** v prostoru (jen
 
 Sjednotí dynamická dema (04+09+11+12+13) přes nový `Stickman` model se `status` atributem a `animate(dt)` metodou.
 
-- [ ] **Vrstva `src/character/`** — nová:
-  - `Stickman.js` — wrapper `{ skeleton, status, animate(dt), render hook }`
-  - `Status.js` — enum: STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE
-  - `Animations.js` — registr `Status → animace` (Pose.lerp keyframes nebo procedurální cykly)
-- [ ] **Pose library expansion** v `src/library/Poses.js`: SIT1..5, RUN cycle, JUMP_PREP/AIR/LAND, LAY, SLEEP, DANCE_*
-- [ ] **`demos/demo02_stresstest.html`** — sjednoceno: status switcher + animation play; plynulý přechod mezi stavy přes Pose.lerp; náhodné varianty SIT (SIT1..5)
-- [ ] Smazat `demos/demo04_animation.html`, `demo09_walk.html`, `demo11_swim.html`, `demo12_climb.html`, `demo13_ikwalk.html`
-- [ ] Aktualizovat `index.html` + `README.md`
+- [~] **Vrstva `src/character/`** — prototyp hotový (Sezení 5):
+  - [x] `Status.js` — enum (10 stavů, 4 implementované)
+  - [~] `Animations.js` — STAND, SIT, WALK, LAY hotové; chybí RUN, SWIM, CLIMB, JUMP, SLEEP, DANCE
+  - [x] `Stickman.js` — wrapper s `setStatus`, `setParams`, `animate(dt)` + plynulé přechody (cubic ease-out, default 0.4 s)
+- [ ] **Pose library expansion** v `src/library/Poses.js`: SIT1..5, RUN cycle, JUMP_PREP/AIR/LAND, SLEEP, DANCE_*
+  - LAY varianty (`layStarfish`, `layChill`, `laySide`, `layReader`, `layRecline`) už existují z F1 — přidat do `Animations.LAY` přes `params.variant`
+- [~] **`demos/demo02_stresstest.html`** — prototyp hotový (Sezení 5): button group STAND/SIT/WALK/LAY + slidery WALK params + plynulé přechody. Chybí: další stavy, variant selector LAY, FPS / debug overlay.
+- [ ] Smazat `demos/demo04_animation.html`, `demo09_walk.html`, `demo11_swim.html`, `demo12_climb.html`, `demo13_ikwalk.html` *(až po dokončení F2 — jejich logika musí být v `Animations.js`)*
+- [ ] Aktualizovat `index.html` + `README.md` (až po dokončení F2)
 
 ### F3 — Akvárium
 

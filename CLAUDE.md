@@ -36,11 +36,16 @@ src/util/       UTILITY — bez Three.js, čisté funkce
 src/library/    KNIHOVNA POSE — definované jednou, importované všude
   Poses.js          — stand, tpose, sit, squat, wave, oneLegL/R, lunge, leanForward, ...
 
+src/character/  CHARACTER — wrapper Stickman + Status + Animations
+  Status.js         — enum (STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE)
+  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK
+  Stickman.js       — wrapper { skeleton, status, time, params }, setStatus, animate(dt) s plynulými přechody
+
 demos/          DEMO HTML — každé demo je samostatná stránka
 .source/        SCRATCH — vyřazené prototypy (mimo architekturu)
 ```
 
-**Pravidlo pro novou logiku:** model neimportuje z view/scene. View neimportuje z scene. Util/library nesmí importovat z model (kromě Pose v library/Poses.js — Pose je sama čistá data).
+**Pravidlo pro novou logiku:** model neimportuje z view/scene. View neimportuje z scene. Util/library nesmí importovat z model (kromě Pose v library/Poses.js — Pose je sama čistá data). Character importuje z model/ a library/, nikdy z view/ ani scene/.
 
 ## Klíčové konvence (gotchas)
 
@@ -103,6 +108,9 @@ demos/          DEMO HTML — každé demo je samostatná stránka
 | Přidat nový kloub / DOF | `src/model/Skeleton.js` (`_build`) |
 | Změnit proporce postavy | `src/model/Skeleton.js` (`buildProportions`) |
 | Přidat novou pózu | `src/library/Poses.js` |
+| Přidat nový stav (status) | `src/character/Status.js` + `Animations.js` |
+| Přidat animační funkci | `src/character/Animations.js` |
+| Změnit délku přechodu | `Stickman.transitionDuration` (default 0.4 s) |
 | Přidat geometrickou utilitu | `src/util/Geometry.js` |
 | Přidat UI helper | `src/util/DemoUI.js` |
 | Vlastní renderování | `src/view/StickmanView.js` (markery, materiály) |

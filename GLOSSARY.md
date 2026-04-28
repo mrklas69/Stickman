@@ -6,7 +6,7 @@ Sekce:
 
 - [Anatomie](#anatomie) — klouby, kosti, strany, směry
 - [Kinematika](#kinematika) — DOF, FK, IK, CoM, support polygon, anatomický úhel + sign, stabilita
-- [Animace](#animace) — Pose, lerp, Status, Animate
+- [Animace](#animace) — Pose, lerp, Status, Animations, Stickman, Transition, Brain
 - [Architektura](#architektura) — vrstvy, naming dem
 
 ---
@@ -187,17 +187,43 @@ Lineární interpolace mezi dvěma pózami pro `t ∈ [0,1]`:
 
 **Pravidlo:** pózy se definují jen v `library/Poses.js`. Dema je nedefinují znovu — importují.
 
-### Status *(plánováno, F2)*
+### Status *(F2 prototyp — Sezení 5)*
 
-Enum stavu postavy: `STAND`, `SIT`, `WALK`, `RUN`, `SWIM`, `CLIMB`, `JUMP`, `LAY`, `SLEEP`, `DANCE`. Atribut na `Stickman` (vrstva `character/`, ne `Skeleton`). Animace mohou mít varianty (`SIT1..5` — náhodný výběr při přechodu).
+Enum stavu postavy v `src/character/Status.js`: `STAND`, `SIT`, `WALK`, `RUN`, `SWIM`, `CLIMB`, `JUMP`, `LAY`, `SLEEP`, `DANCE`. `Object.freeze`d (= zamrazený). Hodnoty jsou stringy (lepší debug + serializace). Atribut na `Stickman`, ne `Skeleton`.
 
-### Animate *(plánováno, F2)*
+Stavy bez registrované animace v `ANIMATIONS` mapě se chovají jako no-op (postava zůstane v poslední pose) — záměrné, ať Stickman nepadá na neimplementovaných stavech. Aktuálně implementované: STAND, SIT, WALK, LAY.
 
-Metoda `stickman.animate(dt)` — posouvá animaci aktuálního statusu o `dt` sekund. Animace = buď keyframes přes `Pose.lerp`, nebo procedurální cykly (chůze, plavání). Registr `Animations.js` v `character/`.
+### Animations / Animate *(F2 prototyp — Sezení 5)*
 
-### Stickman *(plánováno, F2)*
+`src/character/Animations.js` — registr `Status → fn(skeleton, time, params)`. Funkce mutuje skeleton (volá `setAngle`, `rootPosition`, …), nemá return value.
 
-Wrapper `{ skeleton, status, animate(dt), render hook }` v nové vrstvě `src/character/`. Skeleton zůstává čistá data (`model/`); Stickman drží status + animace = chování. Důvod oddělení: kostra je reusable a testovatelná, status/animate je high-level API pro hry (= C2 framework artefakt).
+Defaulty parametrů exportované jako `DEFAULTS_WALK` — single source pro slidery v demu. Demo si při `setStatus()` může předat patch (např. `{ tempo: 1.5 }`), zbytek zdědí z defaults.
+
+Metoda `stickman.animate(dt)` — posune `Stickman.time` o `dt` a zavolá registrovanou funkci. Animace mohou být:
+
+- **Pose-based** (STAND, SIT, LAY): `pose.apply(skeleton)` — jeden řádek, idempotentní.
+- **Procedurální cyklické** (WALK, plánovaný RUN, SWIM): `time → angles` mapping, žádný state.
+
+### Stickman *(F2 prototyp — Sezení 5)*
+
+Wrapper `{ skeleton, status, time, params, transitionDuration, transitionFrom, transitionElapsed }` v `src/character/Stickman.js`. Skeleton zůstává čistá data (`model/`); Stickman drží status + animace + přechody = chování v čase.
+
+API:
+
+- `new Stickman(skeleton, status?, params?)` — konstruktor (default status = STAND, params = `{}`)
+- `stickman.setStatus(status, params?)` — přepne stav, spustí přechod, resetuje `time = 0`
+- `stickman.setParams(patch)` — přepíše parametry beze změny stavu nebo času (= slidery za běhu)
+- `stickman.animate(dt)` — posune čas, aplikuje animaci (s případným blendem)
+
+Důvod oddělení od Skeleton: kostra je reusable a testovatelná, status/animate je high-level API pro hry (= C2 framework artefakt). View ani scene Stickman NEDRŽÍ — to si demo komponuje.
+
+### Transition (přechody mezi stavy) *(F2 prototyp — Sezení 5)*
+
+Když `setStatus()` přepne stav, `Pose.capture(skeleton)` zachytí aktuální stav (`transitionFrom`). Následující `animate()` během `transitionDuration` (default `0.4 s`) blendují přes `Pose.lerp` z toho snapshotu do výstupu nové animace.
+
+Easing = **cubic ease-out** (`1 − (1−t)³`). Důvod volby: postava rychle reaguje na příkaz (rychlý start) a měkce dojede do cílové pozy (= organický pocit). Lineární easing by působil mechanicky, ease-in-out by působil pomalou reakcí.
+
+Edge case — **přepnutí mid-transition**: `Pose.capture` zachytí AKTUÁLNĚ blended pózu (ne původní `transitionFrom`), takže nový přechod plynule pokračuje z aktuálního stavu, žádný "skok zpět".
 
 ### Brain *(plánováno, F3)*
 
@@ -215,7 +241,7 @@ src/view/       VIEW — vykreslení modelu v Three.js
 src/scene/      SCÉNA — společné prostředí (renderer, kamera, světla, podlaha)
 src/util/       UTILITY — bez Three.js, čisté funkce
 src/library/    KNIHOVNA POSE — pojmenované pózy
-src/character/  CHARACTER — wrapper Stickman + Status + Animations (plánováno F2)
+src/character/  CHARACTER — wrapper Stickman + Status + Animations (F2 prototyp)
 demos/          DEMO HTML — každé demo = samostatná stránka
 .source/        SCRATCH — vyřazené prototypy
 ```
@@ -225,7 +251,7 @@ demos/          DEMO HTML — každé demo = samostatná stránka
 - Model **neimportuje** z view ani scene.
 - View **neimportuje** z scene.
 - Util/library **nesmí importovat** z model. Výjimka: `library/Poses.js` může importovat `Pose` (která je sama čistá data).
-- Character (plánováno) bude importovat `model/` (Skeleton, Pose) a `library/` (Poses), ale ne `view/` ani `scene/`.
+- Character importuje `model/` (Skeleton, Pose) a `library/` (Poses), nikdy `view/` ani `scene/`.
 
 ### Naming dem
 

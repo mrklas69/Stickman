@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 02 — Stress test (prototyp F2)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+        #info { position: absolute; top: 10px; left: 0; right: 0;
+                text-align: center; pointer-events: none;
+                text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 4px 0; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
+        #panel { position: absolute; top: 80px; left: 20px;
+                 background: #2a2a35; padding: 14px 18px;
+                 border-radius: 6px; border: 1px solid #444;
+                 width: 300px; z-index: 100;
+                 display: flex; flex-direction: column; gap: 6px; }
+        #panel hr { border: 0; border-top: 1px solid #444; margin: 8px 0; }
+        button.act { padding: 10px; background: #444; color: #fff;
+                     border: 0; border-radius: 4px; cursor: pointer;
+                     font-size: 0.9em; }
+        button.act:hover { background: #ffaa66; color: #1a1a22; }
+        #stats { position: absolute; bottom: 10px; left: 10px;
+                 background: rgba(0,0,0,0.55); padding: 10px 14px;
+                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
+                 min-width: 240px; }
+        .ok  { color: #44ff66; font-weight: bold; }
+        .bad { color: #ff4444; font-weight: bold; }
+        .status { color: #ffaa66; font-weight: bold; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+    <div id="info">
+        <h2>Demo 02 — Stress test (prototyp F2)</h2>
+        <p>Stickman wrapper se status atributem a animate(dt). Prototyp: STAND a WALK.</p>
+    </div>
+
+    <div id="panel"></div>
+    <div id="stats"></div>
+
+    <script type="module">
+        import * as THREE       from 'three';
+        import { Skeleton }     from '../src/model/Skeleton.js';
+        import { StickmanView } from '../src/view/StickmanView.js';
+        import { BasicScene }   from '../src/scene/BasicScene.js';
+        import { Stickman }     from '../src/character/Stickman.js';
+        import { Status }       from '../src/character/Status.js';
+        import { DEFAULTS_WALK } from '../src/character/Animations.js';
+        import {
+            addPanel, addSlider, addToggle, addButtonGroup, injectStyles,
+        } from '../src/util/DemoUI.js';
+
+        // === 1. Setup scény + postavy ===
+        const H = 8;
+        const FLOOR_Y = -H / 2;
+
+        const skel  = new Skeleton(H);
+        const view  = new StickmanView(skel);
+        const scene = new BasicScene({
+            cameraHeight: 0, cameraDistance: 18,
+            floorY: FLOOR_Y,
+        });
+        scene.scene.add(view.group);
+
+        // CoM marker + support polygon (převzato z demo09 — vizuální debug)
+        const comMarker     = view.createCenterOfMassMarker(FLOOR_Y);
+        const supportMarker = view.createSupportPolygonMarker(FLOOR_Y);
+        scene.scene.add(comMarker);
+        scene.scene.add(supportMarker);
+
+        // CoM sféra přes vše (jako v demo09 — sféra je v pase, schovávala by se v trupu)
+        const comSphere = comMarker.userData.sphere;
+        comSphere.material.depthTest = false;
+        comSphere.material.transparent = true;
+        comSphere.material.opacity = 0.85;
+        comSphere.renderOrder = 999;
+
+        // Stickman = wrapper kolem skeleton, drží status + animate(dt).
+        // Start ve STAND — postava stojí klidně, dokud nestiskneme WALK.
+        // Spread copy: každý Stickman musí mít vlastní params, jinak by 2 instance
+        // sdílely stejnou referenci a změna jednou by ovlivnila i druhou.
+        const stickman = new Stickman(skel, Status.STAND, { ...DEFAULTS_WALK });
+
+        // === 2. Globální flagy řízené UI ===
+        let snapEnabled = true;
+        let paused      = false;
+
+        // === 3. UI panel ===
+        injectStyles();
+        const panel = addPanel('panel', 'Status');
+
+        // Button group: přepíná Stickman.status. Klíče = stringy ze Status enumu,
+        // ať to máme jednoduché (žádný extra mapping).
+        //
+        // POZOR: NEPŘEDÁVÁME activeKey argument, ten by synchronně zavolal callback,
+        // a callback referuje tempoUI/ampUI/... které jsou deklarované teprve POD
+        // tímto blokem (Temporal Dead Zone — const-y nejsou dostupné před deklarací).
+        // Místo toho voláme bg.activate(Status.STAND) ručně až za vytvořením sliderů.
+        const bg = addButtonGroup(panel,
+            [
+                { key: Status.STAND, label: 'STAND' },
+                { key: Status.SIT,   label: 'SIT' },
+                { key: Status.WALK,  label: 'WALK' },
+                { key: Status.LAY,   label: 'LAY' },
+            ],
+            (key) => {
+                // setStatus přebírá kopii defaultů (kvůli sliderům — params si je
+                // pak stickman drží a slidery je mutují přes setParams).
+                // Spread = shallow copy, na enum/scalary stačí.
+                stickman.setStatus(key, { ...DEFAULTS_WALK });
+                // Po změně status synchronizujeme slidery na default (= konzistentní UX).
+                tempoUI.set(DEFAULTS_WALK.tempo);
+                ampUI.set(DEFAULTS_WALK.stepAmp);
+                kneeUI.set(DEFAULTS_WALK.kneeLift);
+                twistUI.set(DEFAULTS_WALK.twistAmp);
+                swayUI.set(DEFAULTS_WALK.swayAmp);
+                armUI.set(DEFAULTS_WALK.armSwing);
+            }
+        );
+
+        // Oddělovač
+        const hr1 = document.createElement('hr'); panel.appendChild(hr1);
+        const h3 = document.createElement('h3');
+        h3.className = 'duip-h3'; h3.textContent = 'Walk parametry';
+        panel.appendChild(h3);
+
+        // Slidery — onChange volá stickman.setParams() (= mutace bez resetu času).
+        // Tah za slider při běžící chůzi tedy plynule mění tempo/amplitudu,
+        // postava nepřeskočí na phase 0.
+        const tempoUI = addSlider(panel, {
+            label: 'Tempo', min: 0.2, max: 2.0, step: 0.1,
+            value: DEFAULTS_WALK.tempo, unit: ' Hz',
+            onChange: (v) => stickman.setParams({ tempo: v }),
+        });
+        const ampUI = addSlider(panel, {
+            label: 'Rozkrok', min: 10, max: 60, step: 2,
+            value: DEFAULTS_WALK.stepAmp, unit: '°',
+            onChange: (v) => stickman.setParams({ stepAmp: v }),
+        });
+        const kneeUI = addSlider(panel, {
+            label: 'Zdvih kol.', min: 0, max: 120, step: 5,
+            value: DEFAULTS_WALK.kneeLift, unit: '°',
+            onChange: (v) => stickman.setParams({ kneeLift: v }),
+        });
+        const twistUI = addSlider(panel, {
+            label: 'Twist hrudn.', min: 0, max: 20, step: 1,
+            value: DEFAULTS_WALK.twistAmp, unit: '°',
+            onChange: (v) => stickman.setParams({ twistAmp: v }),
+        });
+        const swayUI = addSlider(panel, {
+            label: 'Vrávorání', min: 0, max: 15, step: 1,
+            value: DEFAULTS_WALK.swayAmp, unit: '°',
+            onChange: (v) => stickman.setParams({ swayAmp: v }),
+        });
+        const armUI = addToggle(panel, {
+            label: 'Ruce v protisměru', value: DEFAULTS_WALK.armSwing,
+            onChange: (v) => stickman.setParams({ armSwing: v }),
+        });
+
+        // Oddělovač + ostatní toggly/buttony
+        const hr2 = document.createElement('hr'); panel.appendChild(hr2);
+
+        addToggle(panel, {
+            label: 'Snap to floor', value: snapEnabled,
+            onChange: (v) => { snapEnabled = v; },
+        });
+
+        const pauseBtn = document.createElement('button');
+        pauseBtn.className = 'act';
+        pauseBtn.textContent = 'Pauza';
+        pauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? 'Pokračovat' : 'Pauza';
+        });
+        panel.appendChild(pauseBtn);
+
+        // Až teď, KDY VŠECHNY SLIDERY JSOU INICIALIZOVANÉ, bezpečně aktivujeme STAND.
+        // Volání spustí callback button groupu — ten potřebuje tempoUI a spol.
+        bg.activate(Status.STAND);
+
+        // === 4. Render smyčka ===
+        scene.onUpdate((delta) => {
+            if (!paused) {
+                // Animate posune Stickman.time o dt a aplikuje aktuální animaci
+                // na skeleton (mutuje úhly).
+                stickman.animate(delta);
+                if (snapEnabled) skel.snapToFloor(FLOOR_Y);
+            }
+            // View čte úhly ze skeletu a aplikuje je na Three.js objekty
+            view.update();
+            view.updateCenterOfMassMarker(comMarker, true);
+            view.updateSupportPolygonMarker(supportMarker);
+            updateStats();
+        });
+
+        // === 5. Stats panel (read-only) ===
+        const statsEl = document.getElementById('stats');
+        function updateStats() {
+            const stable = skel.isStable();
+            const com = skel.getCenterOfMass();
+            // Pro WALK ukazujeme phase + stage; pro STAND jen čas.
+            let extra = '';
+            if (stickman.status === Status.WALK) {
+                const tempo = stickman.params.tempo ?? DEFAULTS_WALK.tempo;
+                const phaseL = (stickman.time * tempo) % 1;
+                const stage = (phaseL < 0.5)
+                    ? 'L SWING / R stance'
+                    : 'L STANCE / R swing';
+                extra = `<div><strong>Phase L:</strong> ${phaseL.toFixed(2)} (${stage})</div>`;
+            }
+            statsEl.innerHTML = `
+                <div><strong>Status:</strong>
+                    <span class="status">${stickman.status.toUpperCase()}</span></div>
+                <div><strong>Time:</strong> ${stickman.time.toFixed(2)} s</div>
+                ${extra}
+                <div><strong>Support:</strong> ${skel.supportPoints.join(', ')}</div>
+                <div><strong>Stabilita:</strong>
+                    <span class="${stable ? 'ok' : 'bad'}">${stable ? 'STABILNÍ' : 'PADÁ'}</span>
+                </div>
+                <div><strong>CoM (xz):</strong> x=${com.x.toFixed(2)}, z=${com.z.toFixed(2)}</div>
+            `;
+        }
+
+        scene.start();
+    </script>
+</body>
+</html>
