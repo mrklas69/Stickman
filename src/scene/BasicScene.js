@@ -85,8 +85,11 @@ export class BasicScene {
         // === Volitelná podlaha ===
         // Pokud floorY je číslo, vyrobíme tmavý plane v této výšce, který stíny PŘIJÍMÁ.
         if (floorY !== null) {
+            // 33% průhlednost (= 67% opacity) — dostatečně viditelná podlaha,
+            // ale support polygon a další overlay vrstvy pod ní lehce prosvítají.
             const floorMat = new THREE.MeshStandardMaterial({
                 color: 0x2a2a30, roughness: 0.9, metalness: 0.0,
+                transparent: true, opacity: 0.67,
             });
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), floorMat);
             floor.rotation.x = -Math.PI / 2;        // do horizontální roviny

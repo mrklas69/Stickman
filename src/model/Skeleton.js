@@ -1,6 +1,6 @@
 // src/model/Skeleton.js
 // =============================================================================
-// Skeleton "Minimal" — 9 funkčních kloubů + 4 koncové body, celkem 14 DOF.
+// Skeleton "Minimal" — 9 funkčních kloubů + 4 koncové body, celkem 15 DOF.
 //
 // SVĚTOVÁ KONVENCE:
 //   - Postava stojí v origin a "dívá se" podél -Z (Three.js standard).
@@ -15,7 +15,7 @@
 //
 // HIERARCHIE (Minimal):
 //   pelvis (root, 0 DOF)
-//   ├── neck (2 DOF) ── headTop (0)
+//   ├── torso (3) ── neck (3) ── headTop (0)
 //   ├── shoulderL (2) ── elbowL (1) ── wristL (0)
 //   ├── shoulderR (2) ── elbowR (1) ── wristR (0)
 //   ├── hipL (2) ── kneeL (1) ── ankleL (0)
@@ -55,8 +55,8 @@ function buildProportions(H) {
         SHOULDER_X:    0.075  * H,
         // HIP_X mírně > R.pelvis → pánevní klouby vyčnívají z pasu (vidět)
         HIP_X:         0.050  * H,
-        UPPER_ARM:     0.245  * H,  // rameno → loket (cca jako THIGH, paže delší ~ "ke kapsám")
-        FOREARM:       0.195  * H,  // loket → zápěstí (zápěstí dosáhne k polovině stehna)
+        UPPER_ARM:     0.180  * H,  // rameno → loket (kratší biceps)
+        FOREARM:       0.215  * H,  // loket → zápěstí (delší předloktí — pro ohnutý loket dlaň doráží k hlavě/krku)
         THIGH:         0.245  * H,  // kyčel → koleno
         SHIN:          0.245  * H,  // koleno → kotník
 
@@ -102,12 +102,31 @@ export class Skeleton {
         this.joints = {};                            // flat mapa name → Joint
         this.rootPosition = { x: 0, y: 0, z: 0 };    // umístění celé postavy ve světě
         this.rootRotation = { x: 0, y: 0, z: 0 };    // orientace ve stupních (Three.js přímo)
-        // Body opory = jména kloubů, na kterých postava "stojí"/"drží se".
-        // Default = chodidla (pro běžný stoj). Pose může přepsat (viz Pose.supportPoints).
-        this.supportPoints = ['ankleL', 'ankleR'];
+        // Body opory NEJSOU explicitní field — joints jsou supports automaticky.
+        // Contact body se počítají dynamicky z aktuální world Y (viz getContactPoints).
+        // `supportPoints` getter níže zachován pro legacy přístup ze starých dem.
         this._build();
         this.root = this.joints.pelvis;
     }
+
+    /**
+     * Legacy getter — vrací jména kontaktních kloubů (= těch s Y blízko nejnižšího
+     * po current world transformations). Žádný setter — assignment ze starých dem
+     * se ignoruje.
+     */
+    get supportPoints() {
+        this.computeWorldTransforms();
+        const tol = this.H * 0.04;
+        let minY = Infinity;
+        for (const j of Object.values(this.joints)) {
+            if (j.worldPosition.y < minY) minY = j.worldPosition.y;
+        }
+        return Object.values(this.joints)
+            .filter(j => j.worldPosition.y <= minY + tol)
+            .map(j => j.name);
+    }
+    // Setter no-op pro backward compat — stará dema dělají skel.supportPoints = [...]
+    set supportPoints(_) { /* ignorováno — supports jsou teď dynamicky určené */ }
 
     /**
      * Sestaví hierarchii. Každý kloub má lokální offset vůči rodiči
@@ -135,21 +154,23 @@ export class Skeleton {
         const torso = add('torso', pelvis,
             { x: 0, y: p.LOWER_TORSO, z: 0 },
             ['x', 'y', 'z'],
-            // x: -20 záklon, 30 předklon (thoracic spine flexion ~30-40° anatomicky)
+            // x: -30 záklon (lumbar extension pro Sphinx/kobra), 30 předklon
             // y: ±45 twist (body roll v plavu)
             // z: ±20 lateral flexe (úklon, anatomicky ~25-30°)
-            { x: [-20, 30], y: [-45, 45], z: [-20, 20] },
+            { x: [-30, 30], y: [-45, 45], z: [-20, 20] },
             { x: -1, y: +1, z: +1 }
         );
 
         // neck sedí na vrcholu trupu, NAD torso (= druhá polovina páteře = hrudní/krční).
-        // signX = -1 (předklon: hlava +Y → -Z; v Three.js by to bylo +X, ale chceme -Z → invert)
-        // signZ = +1 (úklon doleva postavy = -X; Three.js +Z na vec(0,1,0) dá -X → bez invertu)
+        //   x = předklon/záklon (signX = -1; hlava +Y → -Z; v Three.js by to bylo +X, ale chceme -Z → invert)
+        //   y = twist hlavy (signY = +1, stejná konvence jako torso.y — v lokále neck
+        //       je Three.js Ry+ otočení kolem osy páteře vůči parent torso). Limity ±90°.
+        //   z = úklon hlavy (signZ = +1; úklon doleva postavy = -X)
         const neck = add('neck', torso,
             { x: 0, y: p.UPPER_TORSO, z: 0 },
-            ['x', 'z'],
-            { x: [-30, 60], z: [-40, 40] },
-            { x: -1, z: +1 }
+            ['x', 'y', 'z'],
+            { x: [-30, 60], y: [-90, 90], z: [-40, 40] },
+            { x: -1, y: +1, z: +1 }
         );
         // Vršek hlavy — koncový bod (0 DOF). View tu položí sféru hlavy se středem
         // o HEAD_RADIUS níž, takže její SPODEK leží přesně na krčním kloubu.
@@ -170,14 +191,14 @@ export class Skeleton {
             ['x', 'z'],
             // x: -90 = paže za záda (extension), 200 = paže přes hlavu dozadu (hyperextenze
             //         pro plavce/gymnasty — reálně se kombinuje s body roll v torso.y)
-            { x: [-90, 200], z: [-30, 180] },
+            { x: [-90, 200], z: [-30, 120] },
             { x: +1, z: -1 }
         );
         // Loket: ohyb předloktí kupředu. Vec(0,-1,0) +θ X = -Z pro +90°. signX = +1.
         const elbowL = add('elbowL', shoulderL,
             { x: 0, y: -p.UPPER_ARM, z: 0 },
             ['x'],
-            { x: [0, 145] },
+            { x: [0, 170] },
             { x: +1 }
         );
         add('wristL', elbowL,
@@ -190,13 +211,13 @@ export class Skeleton {
         const shoulderR = add('shoulderR', torso,
             { x: p.SHOULDER_X, y: p.UPPER_TORSO, z: 0 },
             ['x', 'z'],
-            { x: [-90, 200], z: [-30, 180] },
+            { x: [-90, 200], z: [-30, 120] },
             { x: +1, z: +1 }
         );
         const elbowR = add('elbowR', shoulderR,
             { x: 0, y: -p.UPPER_ARM, z: 0 },
             ['x'],
-            { x: [0, 145] },
+            { x: [0, 170] },
             { x: +1 }
         );
         add('wristR', elbowR,
@@ -252,12 +273,11 @@ export class Skeleton {
         return this.getJoint(jointName).setAngle(axis, deg);
     }
 
-    /** Resetuje všechny klouby do rest pose, root do origin a body opory na default. */
+    /** Resetuje všechny klouby do rest pose a root do origin. */
     reset() {
         Object.values(this.joints).forEach(j => j.reset());
         this.rootPosition = { x: 0, y: 0, z: 0 };
         this.rootRotation = { x: 0, y: 0, z: 0 };
-        this.supportPoints = ['ankleL', 'ankleR'];
     }
 
     /** Iteruje přes všechny klouby (callback dostane Joint). */
@@ -389,40 +409,45 @@ export class Skeleton {
     // =========================================================================
 
     /**
-     * Vrátí world pozice {x,y,z} všech bodů opory (= kloubů z this.supportPoints).
+     * Vrátí world pozice {x,y,z} kontaktních kloubů (= těch s Y blízko nejnižšího,
+     * uvnitř `tolerance`). Joints jsou supports automaticky a contact body se
+     * počítají dynamicky podle current geometrie pose.
+     *
+     * @param {number} [tolerance] - šířka pásu od minY (default = 0.04 × H)
      */
-    getSupportPoints() {
+    getSupportPoints(tolerance = null) {
         this.computeWorldTransforms();
-        return this.supportPoints.map(name => ({ ...this.getJoint(name).worldPosition }));
+        const tol = tolerance ?? this.H * 0.04;
+        let minY = Infinity;
+        for (const j of Object.values(this.joints)) {
+            if (j.worldPosition.y < minY) minY = j.worldPosition.y;
+        }
+        return Object.values(this.joints)
+            .filter(j => j.worldPosition.y <= minY + tol)
+            .map(j => ({ ...j.worldPosition }));
     }
 
     /**
-     * Posune rootPosition.y tak, aby NEJNIŽŠÍ z bodů opory ležel přesně na floorY.
-     * To umožní postavě "stát na podlaze" v jakékoliv póze: po dřepu klesne celý
-     * trup, po stoji na 1 noze se výška nemění (protože ankleL je nejnižší stejně),
-     * při lehu by se postava posunula dolů na úroveň zad (kdyby support body byly
-     * tam definované).
+     * Posune rootPosition.y tak, aby NEJNIŽŠÍ joint ležel přesně na floorY.
+     * Joints jsou nyní všechny supports — algoritmus prochází všechny pivots,
+     * najde minimum Y, a srovná na podlahu.
      *
      * Pozor: po snapu jsou cached worldPositions zastaralé. Pokud chceš dál
      * pracovat s world pozicemi, zavolej computeWorldTransforms() znovu nebo
      * přímo getCenterOfMass() (která to volá interně).
      */
     snapToFloor(floorY = 0) {
-        if (this.supportPoints.length === 0) return;
         this.computeWorldTransforms();
-        // Najdi nejnižší support point ve world Y
         let minY = Infinity;
-        for (const name of this.supportPoints) {
-            const wy = this.getJoint(name).worldPosition.y;
-            if (wy < minY) minY = wy;
+        for (const j of Object.values(this.joints)) {
+            if (j.worldPosition.y < minY) minY = j.worldPosition.y;
         }
-        // Posun root tak, aby nejnižší support byl přesně na floorY
-        // Pokud minY > floorY → posuneme dolů; pokud minY < floorY → nahoru.
+        if (minY === Infinity) return;
         this.rootPosition.y += (floorY - minY);
     }
 
     /**
-     * Test stability: leží horizontální projekce CoM uvnitř podpůrného polygonu?
+     * Test stability: leží horizontální projekce CoM uvnitř contact polygonu?
      * - 0 bodů: nestabilní vždy
      * - 1 bod: stabilní pokud distance(CoM_xz, point_xz) <= tolerance (= "velikost chodidla")
      * - 2 body: stabilní pokud distance od úsečky AB v rovině XZ <= tolerance
@@ -431,21 +456,14 @@ export class Skeleton {
      * @param {number} [tolerance] - rozšíření polygonu (default = 0.04 × H, "velikost chodidla")
      */
     isStable(tolerance = null) {
-        const sp = this.getSupportPoints();
-        if (sp.length === 0) return false;
+        const cp = this.getSupportPoints(tolerance);
+        if (cp.length === 0) return false;
         const com = this.getCenterOfMass();
         const tol = tolerance ?? this.H * 0.04;
 
-        // 1 bod opory: CoM musí být v kruhu kolem něj
-        if (sp.length === 1) {
-            return distXZ(com, sp[0]) <= tol;
-        }
-        // 2 body: úsečka mezi nimi (s tolerancí kolem)
-        if (sp.length === 2) {
-            return distPointToSegmentXZ(com, sp[0], sp[1]) <= tol;
-        }
-        // 3+ bodů: convex hull + point-in-polygon test (s tolerance jako rozšíření)
-        const hull = convexHullXZ(sp);
+        if (cp.length === 1) return distXZ(com, cp[0]) <= tol;
+        if (cp.length === 2) return distPointToSegmentXZ(com, cp[0], cp[1]) <= tol;
+        const hull = convexHullXZ(cp);
         return pointInConvexPolygonXZ(com, hull, tol);
     }
 }

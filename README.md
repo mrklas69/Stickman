@@ -87,9 +87,10 @@ A few non-obvious decisions worth knowing before reading the code:
 - **`Pose.apply()` resets the root.** `apply()` calls `skeleton.reset()`, which clears `rootPosition` and `rootRotation`. Set those *after* `pose.apply()`, not before.
 - **Pose interpolation is hybrid.** Angles lerp linearly; `supportPoints` are discrete and switch at `t = 0.5`.
 
-## Project rules
+## Documentation
 
-The full set of project conventions, gotchas, and extension points lives in [`CLAUDE.md`](./CLAUDE.md). Read it before adding a new joint, demo, or layer.
+- [`CLAUDE.md`](./CLAUDE.md) — full set of project conventions, gotchas, and extension points. Read before adding a new joint, demo, or layer.
+- [`GLOSSARY.md`](./GLOSSARY.md) — project terms (anatomy, kinematics, animation, architecture). Single source of truth for joint names, DOF, IK, CoM, support polygon, Pose, Status, layers.
 
 ## License
 

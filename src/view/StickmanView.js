@@ -17,21 +17,42 @@
 
 import * as THREE from 'three';
 import { convexHullXZ } from '../util/Geometry.js';
+import { PAL } from '../util/Palette.js';
 
 const DEG_TO_RAD = Math.PI / 180;
+
+// Mapa parent+child → jméno kosti (= klíč v proportions.MASS).
+// Single source of truth pro DebugView hover (jméno, hmotnost) — duplikuje info
+// z Skeleton.getCenterOfMass() bones tabulky, ale tady je potřeba lookup.
+const BONE_NAMES = {
+    'pelvis|torso':     'torsoLower',
+    'torso|neck':       'torsoUpper',
+    'shoulderL|elbowL': 'upperArmL',
+    'elbowL|wristL':    'forearmL',
+    'shoulderR|elbowR': 'upperArmR',
+    'elbowR|wristR':    'forearmR',
+    'hipL|kneeL':       'thighL',
+    'kneeL|ankleL':     'shinL',
+    'hipR|kneeR':       'thighR',
+    'kneeR|ankleR':     'shinR',
+};
 
 export class StickmanView {
     constructor(skeleton) {
         this.skeleton = skeleton;
         // Materiály — sdílené napříč meshes (úspora paměti)
         this.mats = {
-            torso: new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.5 }),
-            limb:  new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.5 }),
-            joint: new THREE.MeshStandardMaterial({ color: 0xff7733, roughness: 0.4 }),
-            head:  new THREE.MeshStandardMaterial({ color: 0xddccbb, roughness: 0.6 }),
+            torso: new THREE.MeshStandardMaterial({ color: PAL.bone,    roughness: 0.5 }),
+            limb:  new THREE.MeshStandardMaterial({ color: PAL.bone,    roughness: 0.5 }),
+            // Joint sféry sdílejí barvu se support markery — joints JSOU supports.
+            joint: new THREE.MeshStandardMaterial({ color: PAL.support, roughness: 0.4 }),
+            head:  new THREE.MeshStandardMaterial({ color: PAL.head,    roughness: 0.6 }),
         };
         this.group = new THREE.Group();          // root celé postavy ve scéně
         this.jointObjects = {};                  // jointName → THREE.Group (pivot kloubu)
+        this.jointSpheres = {};                  // jointName → THREE.Mesh (sféra v kloubu) — jen pro DOF jointy
+        this.boneMeshes = {};                    // boneName → THREE.Mesh (kost) — pro hover picking v DebugView
+        this.headMesh = null;                    // THREE.Mesh hlavy — pro hover picking
         this._build();
         this.update();                            // sync s rest pose
     }
@@ -63,7 +84,23 @@ export class StickmanView {
                 if (boneType) {
                     const mesh = this._makeBoneMesh(joint, child, boneType);
                     mesh.castShadow = true;          // kost vrhá stín na podlahu
+                    // userData pro hover picking (DebugView). Pokud kost nemá záznam
+                    // v BONE_NAMES (= neoceňovaná kost, např. nemělo by se stát),
+                    // jméno = "parent→child" jako fallback.
+                    const key = `${joint.name}|${child.name}`;
+                    const boneName = BONE_NAMES[key] || `${joint.name}→${child.name}`;
+                    const length = Math.hypot(child.localOffset.x, child.localOffset.y, child.localOffset.z);
+                    const mass = this.skeleton.proportions.MASS[boneName];   // může být undefined pro neoceňované
+                    mesh.userData = {
+                        type: 'bone',
+                        name: boneName,
+                        parent: joint.name,
+                        child: child.name,
+                        length,
+                        mass,
+                    };
                     parentObj.add(mesh);
+                    this.boneMeshes[boneName] = mesh;
                 }
 
                 // Sféra v kloubu — jen pro klouby s DOF (ne pro koncové body)
@@ -74,7 +111,13 @@ export class StickmanView {
                     );
                     sphere.position.copy(pivot.position);
                     sphere.castShadow = true;
+                    // userData pro hover picking. type='joint' + jointName = klíč do skeleton.joints.
+                    sphere.userData = {
+                        type: 'joint',
+                        jointName: child.name,
+                    };
                     parentObj.add(sphere);
+                    this.jointSpheres[child.name] = sphere;
                 }
 
                 // Hlava jako sféra "stojící" pod headTopem
@@ -87,7 +130,14 @@ export class StickmanView {
                     // headTop je vrchol hlavy → střed sféry je o HEAD_RADIUS níž
                     head.position.set(0, -r, 0);
                     head.castShadow = true;
+                    head.userData = {
+                        type: 'head',
+                        name: 'head',
+                        radius: r,
+                        mass: this.skeleton.proportions.MASS.head,
+                    };
                     pivot.add(head);
+                    this.headMesh = head;
                 }
 
                 visit(child, pivot);
@@ -154,7 +204,7 @@ export class StickmanView {
     createCenterOfMassMarker(floorY = -4) {
         const group = new THREE.Group();
         const r = this.skeleton.proportions.JOINT_RADIUS * 1.6;
-        const COLOR = 0x44ff66;
+        const COLOR = PAL.com;
 
         // Zelená sféra na CoM. MeshBasicMaterial = bez stínování → svítí stále.
         const sphere = new THREE.Mesh(
@@ -212,7 +262,7 @@ export class StickmanView {
 
         if (colorByStability) {
             const stable = this.skeleton.isStable();
-            const color = stable ? 0x44ff66 : 0xff4444;
+            const color = stable ? PAL.com : PAL.comUnstable;
             sphere.material.color.setHex(color);
             // Křížek a čára mají sdílené materiály mezi svými potomky/sebou
             cross.children.forEach(c => c.material.color.setHex(color));
@@ -247,7 +297,7 @@ export class StickmanView {
         const sp = this.skeleton.getSupportPoints();
         if (sp.length === 0) return;
 
-        const COLOR = 0xffaa44;
+        const COLOR = PAL.support;
         const r = this.skeleton.proportions.JOINT_RADIUS * 1.4;
         const sphereGeo = new THREE.SphereGeometry(r, 12, 12);
         const projGeo = new THREE.SphereGeometry(r * 0.7, 10, 10);

@@ -6,26 +6,19 @@ Aktivní úkoly. Hotové se přesouvají do `DONE.md`.
 
 Cílový stav: **3 finální stránky** (Inspector statický, Stress test dynamický, Akvárium emergent). Aktuálních 14 dem se postupně sloučí. Plná pádová fyzika je daleko (F4).
 
-### F1 — Inspector (statický)
+### F1 — Inspector (statický) — **HOTOVO** (Sezení 4)
 
 Sloučí dema 01+02+03+05+07 do jedné stránky. Root **fixní** v prostoru (jen y-slider + snap toggle pro zachování demo07 funkce).
 
-- [ ] **GLOSSARY.md** — založit. Sekce: Anatomie (klouby, kosti, strany, směry), Kinematika (DOF, FK, IK, CoM, support polygon, anatomický úhel + sign), Animace (Pose, Pose.lerp, **Status**, **Animate**), Architektura (vrstvy, naming dem)
-- [ ] **`src/view/DebugView.js`** — modul s vrstvami:
-  - CoM marker (zelený, depthTest:false)
-  - Support polygon (linie)
-  - Gravity vector (žlutá šipka z CoM dolů)
-  - Contact points (žluté tečky na podlaze)
-  - **Crash test markery na hlavě** (žluto-černé soustředné disky, default ON, geometrie ne textura — front + side-L + side-R)
-  - **DOF tooltip L1** (raycaster pro výběr kloubu → HTML panel: jméno, DOF axes, limits, signs, current angle)
-  - Toggle pro každou vrstvu zvlášť
-- [ ] **`demos/demo01_inspector.html`** — nový soubor:
-  - Levý panel: pose presety (z `library/Poses`)
-  - Pravý panel: select kloubu → DOF tooltip + slidery
-  - Spodní panel: debug toggles
-  - Slider y root + snap toggle
-- [ ] Smazat `demos/demo01_static.html`, `demo02_poses.html`, `demo03_dof.html`, `demo05_com.html`, `demo07_snap.html`
-- [ ] Aktualizovat `index.html` rozcestník + `README.md` tabulku dem
+- [x] **GLOSSARY.md** — založeno (anatomie, kinematika, animace, architektura)
+- [x] **`src/view/DebugView.js`** — vrstvy: CoM, support polygon, gravity arrow, body markery (nos+anáhata), hover tooltip
+- [x] **`demos/demo01_inspector.html`** — Reset/Random + sekce LEHY a Ostatní; všechny slidery (DOF + root pos/rot); pose transitions; Copy JSON; tooltipy + dvojklik reset
+- [x] **`src/util/Palette.js`** — hi-tech paleta (CoM turquoise, support magenta-pink, body markery gold)
+- [x] **Skeleton změny:** neck.y twist DOF (totalDOF 14→15), torso.x záklon -30°, elbow 170°, shoulder.z 120°, UPPER_ARM/FOREARM přerozděleno (0.18 / 0.215)
+- [x] **8 lehových pos** (`LIE_POSES`): layBack, layStarfish, layChill, laySide, layReader, layRecline
+- [x] **F1.5 Sjednocení joint = support** — supportPoints field deprecated (legacy getter), joints jsou supports automaticky, contact body se počítají dynamicky (Y ≤ min + tol). Sféry kloubů barva PAL.support.
+- [ ] Smazat `demos/demo01_static.html`, `demo02_poses.html`, `demo03_dof.html`, `demo05_com.html`, `demo07_snap.html` *(až po F2 — některé mohou ještě sloužit jako reference)*
+- [x] Aktualizovat `index.html` rozcestník + popis demo01
 
 ### F2 — Stress test (dynamický unifikovaný)
 

@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 01 — Inspector</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+
+        /* === Layout: viewport uprostřed, panely vlevo, vpravo, dole === */
+        #app {
+            position: relative;
+            display: grid;
+            grid-template-columns: 200px 1fr 320px;
+            grid-template-rows: 1fr auto;
+            grid-template-areas:
+                "left   viewport right"
+                "bottom bottom   bottom";
+            height: 100vh;
+            width: 100vw;
+        }
+        /* overflow:hidden — canvas má fixní pixel velikost ze setSize, viewport
+           ho udrží uvnitř svého grid boxu i když se rozměry mírně rozejdou. */
+        #viewport     { grid-area: viewport; position: relative;
+                        min-width: 0; min-height: 0; overflow: hidden; }
+        #panel-left   { grid-area: left;   background: #22222b; border-right: 1px solid #444;
+                        overflow-y: auto; padding: 14px 12px; box-sizing: border-box; }
+        #panel-right  { grid-area: right;  background: #22222b; border-left: 1px solid #444;
+                        overflow-y: auto; padding: 14px 14px; box-sizing: border-box; }
+        #panel-bottom { grid-area: bottom; background: #22222b; border-top: 1px solid #444;
+                        padding: 10px 16px; box-sizing: border-box;
+                        display: flex; align-items: center; justify-content: center;
+                        gap: 24px; flex-wrap: wrap; }
+
+        /* Hlavička v rohu viewportu */
+        #info { position: absolute; top: 10px; left: 10px;
+                pointer-events: none; text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 2px 0; font-size: 1.05em; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.82em; }
+
+        /* === Panel-left: Poses === */
+        /* Hlavní nadpis ("Pózy") — sans-serif, amber, uppercase. */
+        #panel-left h3 { margin: 0 0 10px 0; color: #ffaa66;
+                         font-size: 0.85em; text-transform: uppercase;
+                         letter-spacing: 0.5px; }
+        /* Subsekce ("LEHY", …) — stejný styl jako hlavní panel headers
+           (sans-serif, amber, uppercase) pro vizuální konzistenci.
+           Border-top oddělí od předchozí sekce. */
+        #panel-left h4.pose-section { margin: 14px 0 8px 0;
+                                       color: #ffaa66;
+                                       font-size: 0.85em;
+                                       text-transform: uppercase;
+                                       letter-spacing: 0.5px;
+                                       font-weight: normal;
+                                       border-top: 1px solid #333; padding-top: 12px; }
+        .pose-btn {
+            display: block; width: 100%; padding: 8px 10px;
+            background: #2a2a35; color: #ddd; border: 1px solid #3a3a45;
+            border-radius: 4px; cursor: pointer; margin-bottom: 4px;
+            text-align: left; font-size: 0.85em;
+        }
+        .pose-btn:hover  { background: #3a3a45; }
+        .pose-btn.active { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
+
+        /* === Panel-right: všechny slidery seskupené === */
+        /* Hlavní nadpis panelu ("Slidery") — sans-serif, uppercase, amber. */
+        #panel-right h3 { margin: 0 0 8px 0; color: #ffaa66;
+                          font-size: 0.85em; text-transform: uppercase;
+                          letter-spacing: 0.5px; }
+        /* Nadpisy oddílů uvnitř panelu (Root rotation, Trup, …) — odlišit
+           jiným fontem + barvou: monospace + ice modrá, normální case.
+           ID v selektoru zvyšuje specificity, ať přepíše #panel-right h3. */
+        #panel-right .group h3 { margin: 0 0 6px 0;
+                                  font-family: monospace; color: #88ccff;
+                                  font-size: 0.85em;
+                                  text-transform: none; letter-spacing: 0; }
+        .group { margin-bottom: 12px; padding-bottom: 8px;
+                 border-bottom: 1px solid #333; }
+        .group:last-child { border-bottom: 0; }
+        .row { display: flex; align-items: center; margin: 3px 0; gap: 6px;
+               font-size: 0.78em; }
+        /* Popisky sliderů zvětšené (+2px nad row default) — lepší čitelnost
+           pro monospace identifikátory typu "shoulderL.x". */
+        .row label { width: 92px; color: #ccc; font-family: monospace;
+                     font-size: 14px; }
+        .row input[type=range] { flex: 1; min-width: 0; accent-color: #ffaa66; }
+        .row .value { width: 44px; text-align: right; font-family: monospace;
+                      color: #88ccff; }
+        button.action {
+            width: 100%; padding: 9px; background: #444; color: #fff;
+            border: 0; border-radius: 4px; cursor: pointer; margin-top: 8px;
+            font-size: 0.85em;
+        }
+        button.action:hover { background: #ffaa66; color: #1a1a22; }
+        /* Mini-button pro Copy JSON (dočasně — pro radění s pózami) */
+        button.mini {
+            padding: 4px 12px; background: #2a2a35; color: #ddd;
+            border: 1px solid #444; border-radius: 4px; cursor: pointer;
+            font-size: 11px; margin-top: 8px;
+        }
+        button.mini:hover { background: #3a3a45; border-color: #ffaa66; }
+        button.mini.flash { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
+
+        /* === Panel-bottom: Debug toggles + root === */
+        .toggle {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 10px; background: #2a2a35; border: 1px solid #3a3a45;
+            border-radius: 4px; cursor: pointer; user-select: none; font-size: 0.85em;
+        }
+        .toggle:hover    { background: #3a3a45; }
+        .toggle.on       { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
+        .toggle .led     { width: 9px; height: 9px; border-radius: 50%;
+                           background: #555; border: 1px solid #777; }
+        .toggle.on .led  { background: #1a1a22; border-color: #1a1a22; }
+        #panel-bottom .b-group {
+            display: flex; align-items: center; gap: 8px;
+            border-right: 1px solid #444; padding-right: 18px;
+        }
+        #panel-bottom .b-group:last-child { border-right: 0; padding-right: 0; }
+        #panel-bottom label { font-size: 0.85em; color: #ccc; }
+        #panel-bottom input[type=range] { width: 140px; accent-color: #ffaa66; }
+        #panel-bottom .value { font-family: monospace; color: #88ccff;
+                               width: 36px; text-align: right; font-size: 0.85em; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+<div id="app">
+    <!-- Levý panel: pose presety -->
+    <div id="panel-left">
+        <h3>Pózy</h3>
+        <div id="poses-list"></div>
+    </div>
+
+    <!-- Hlavní viewport (3D scéna) -->
+    <div id="viewport">
+        <div id="info">
+            <h2>Demo 01 — Inspector</h2>
+            <p>Vyber pózu vlevo. Pohni myší nad postavu pro tooltip. Slidery vpravo, debug dole.</p>
+        </div>
+    </div>
+
+    <!-- Pravý panel: všechny slidery (14 DOF + 3 root rotation) -->
+    <div id="panel-right">
+        <h3>Slidery</h3>
+        <div id="sliders-container"></div>
+    </div>
+
+    <!-- Spodní panel: debug toggles (centrované).
+         Snap to floor a podlaha jsou vždy ON. -->
+    <div id="panel-bottom">
+        <div class="b-group" id="debug-toggles"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { Skeleton }     from '../src/model/Skeleton.js';
+    import { Pose }         from '../src/model/Pose.js';
+    import { StickmanView } from '../src/view/StickmanView.js';
+    import { DebugView }    from '../src/view/DebugView.js';
+    import { BasicScene }   from '../src/scene/BasicScene.js';
+    import * as Poses       from '../src/library/Poses.js';
+
+    // =========================================================================
+    // 1. Model + scéna + view
+    // =========================================================================
+    const H = 8;
+    const FLOOR_Y = -H / 2;          // = -4 (konvence projektu, viz CLAUDE.md)
+    const skel = new Skeleton(H);
+    const view = new StickmanView(skel);
+
+    const viewport = document.getElementById('viewport');
+    const scene = new BasicScene({
+        cameraHeight: 0,
+        cameraDistance: 18,
+        container: viewport,
+        floorY: FLOOR_Y,
+    });
+    scene.scene.add(view.group);
+
+    // =========================================================================
+    // 2. DebugView — overlay vrstev
+    // =========================================================================
+    const debug = new DebugView(view, { floorY: FLOOR_Y });
+    debug.attachToScene(scene.scene);
+    debug.setRaycaster(scene.renderer.domElement, scene.camera);
+
+    // Default = vše zapnuté (CoM + gravity, Support, Body markery, Tooltip).
+    // Tooltip je vždy ON (žádné UI tlačítko); ostatní mají toggles dole.
+    debug.setVisible('com', true);
+    debug.setVisible('gravity', true);
+    debug.setVisible('support', true);
+    debug.setVisible('body', true);
+    debug.setVisible('tooltip', true);
+
+    // =========================================================================
+    // 3. Pravý panel — všechny slidery (14 DOF + 3 root rotation)
+    // =========================================================================
+    // Klouby s DOF a jejich skupiny (sloužící i pro UI hierarchii).
+    // Slidery u každého kloubu se vyrobí dynamicky z j.axes a j.limits.
+    const slidersContainer = document.getElementById('sliders-container');
+    const allSliders = [];           // pro reset / refresh po pose change
+
+    function addGroup(title) {
+        const g = document.createElement('div');
+        g.className = 'group';
+        const h = document.createElement('h3');
+        h.textContent = title;
+        g.appendChild(h);
+        slidersContainer.appendChild(g);
+        return g;
+    }
+
+    /**
+     * Vyrobí slider řádek — vrátí { input, valueEl, refresh() }.
+     * `getValue` čte aktuální hodnotu z modelu (= zdroj pravdy),
+     * `setValue` zapisuje. refresh() přečte model a sync slider+text
+     * (= volat po pose.apply, kdy se model změnil bez UI eventu).
+     */
+    function addSlider(parent, label, min, max, step, getValue, setValue, tooltip = '') {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const decimals = step < 1 ? 1 : 0;
+        const initial = getValue();
+        row.innerHTML = `
+            <label>${label}</label>
+            <input type="range" min="${min}" max="${max}" step="${step}" value="${initial}">
+            <span class="value">${initial.toFixed(decimals)}</span>
+        `;
+        const input = row.querySelector('input');
+        const valueEl = row.querySelector('.value');
+        // Tooltip — browser zobrazí jako native tooltip po ~1s hoveru.
+        // Aplikujeme ho na celý řádek (label + input + value), ať funguje
+        // bez ohledu na to, kde uživatel zastavil kurzor.
+        if (tooltip) {
+            row.title = tooltip;
+            input.title = tooltip;
+            row.querySelector('label').title = tooltip;
+        }
+        // Helper pro přepsání hodnoty + sync UI/scene (sdíleno mezi 'input' a 'dblclick')
+        const writeValue = (v) => {
+            setValue(v);
+            input.value = v;
+            valueEl.textContent = v.toFixed(decimals);
+            skel.snapToFloor(FLOOR_Y);
+            if (rootPosYSlider) rootPosYSlider.refresh();
+            view.update();
+        };
+        input.addEventListener('input', () => writeValue(parseFloat(input.value)));
+        // Dvojklik = reset slideru na 0 (rest pose pro DOF, origin pro root pos/rot).
+        // Ladí s konvencí v editorech (Photoshop, AE, Blender — dblclick reset).
+        input.addEventListener('dblclick', () => writeValue(0));
+        parent.appendChild(row);
+        const slider = {
+            input, valueEl, decimals, getValue, setValue,
+            refresh() {
+                const v = getValue();
+                input.value = v;
+                valueEl.textContent = v.toFixed(decimals);
+            },
+        };
+        allSliders.push(slider);
+        return slider;
+    }
+
+    // Tooltipy per (kloub, osa) — anatomický popis kladného směru.
+    // Viz konvence projektu (CLAUDE.md): kladné úhly = přirozený směr pohybu.
+    const TOOLTIPS = {
+        'torso.x':     'flexe trupu — předklon (+) / záklon (−)',
+        'torso.y':     'twist páteře (body roll) — kladně = otočení doprava',
+        'torso.z':     'lateral flexe — úklon do strany',
+        'neck.x':      'předklon (+) / záklon (−) hlavy',
+        'neck.y':      'twist hlavy — kladně = otočení doprava',
+        'neck.z':      'úklon hlavy do strany',
+        'shoulderL.x': 'levá paže: předpažení (+) / zapažení (−)',
+        'shoulderL.z': 'levá paže: abdukce ven od trupu',
+        'shoulderR.x': 'pravá paže: předpažení (+) / zapažení (−)',
+        'shoulderR.z': 'pravá paže: abdukce ven od trupu',
+        'elbowL.x':    'levý loket: ohyb (předloktí kupředu)',
+        'elbowR.x':    'pravý loket: ohyb (předloktí kupředu)',
+        'hipL.x':      'levá kyčel: předkop (+) / zákop (−)',
+        'hipL.z':      'levá kyčel: roznožka ven (+) / addukce (−)',
+        'hipR.x':      'pravá kyčel: předkop (+) / zákop (−)',
+        'hipR.z':      'pravá kyčel: roznožka ven (+) / addukce (−)',
+        'kneeL.x':     'levé koleno: ohyb (lýtko dozadu)',
+        'kneeR.x':     'pravé koleno: ohyb (lýtko dozadu)',
+    };
+
+    /** Pro daný kloub vyrobí slidery podle jeho aktivních os. */
+    function addJointSliders(group, jointName) {
+        const j = skel.getJoint(jointName);
+        j.axes.forEach(axis => {
+            const [min, max] = j.limits[axis];
+            const key = `${jointName}.${axis}`;
+            addSlider(group, key, min, max, 1,
+                () => skel.getJoint(jointName).getAngle(axis),
+                (v) => { skel.setAngle(jointName, axis, v); },
+                TOOLTIPS[key] || ''
+            );
+        });
+    }
+
+    // === Skupiny + slidery ===
+    // Pořadí: Root (orientace celé postavy) jako první, pak DOF klouby
+    // shora dolů, zleva doprava. Root pos je za rotation, ať root sekce drží
+    // pohromadě.
+    //
+    // Root rotation — Three.js stupně (raw, ne anatomické). Použitelné pro
+    // orientaci postavy (např. lehnutí na záda = rootRotation.x ±90°).
+    const ROT_TOOLTIPS = {
+        x: 'rotace celé postavy kolem X (Three.js °) — náklon dozadu (+) / dopředu (−)',
+        y: 'rotace celé postavy kolem Y — otáčení horizontálně',
+        z: 'rotace celé postavy kolem Z — náklon do strany',
+    };
+    {
+        const g = addGroup('Root rotation');
+        ['x', 'y', 'z'].forEach(axis => {
+            addSlider(g, `root.${axis}`, -180, 180, 1,
+                () => skel.rootRotation[axis],
+                (v) => { skel.rootRotation[axis] = v; },
+                ROT_TOOLTIPS[axis]
+            );
+        });
+    }
+
+    // Root pos — translace celé postavy. Y má snap-aware speciál (uložíme
+    // referenci na slider Y, ať ho můžeme refresh při snap přepočtu).
+    const POS_TOOLTIPS = {
+        x: 'translace celé postavy v ose X (postavova pravá +)',
+        y: 'translace v ose Y — řízeno snap-to-floor (read-only)',
+        z: 'translace v ose Z (postava se dívá do −Z)',
+    };
+    let rootPosYSlider = null;
+    {
+        const g = addGroup('Root pos');
+        ['x', 'y', 'z'].forEach(axis => {
+            const slider = addSlider(g, `root.${axis}`, -8, 8, 0.1,
+                () => skel.rootPosition[axis],
+                (v) => { skel.rootPosition[axis] = v; },
+                POS_TOOLTIPS[axis]
+            );
+            if (axis === 'y') rootPosYSlider = slider;
+        });
+    }
+
+    // Klouby — anatomicky shora dolů, levá před pravou
+    { const g = addGroup('Trup');       addJointSliders(g, 'torso'); }
+    { const g = addGroup('Krk');        addJointSliders(g, 'neck'); }
+    { const g = addGroup('Levá paže');  addJointSliders(g, 'shoulderL'); addJointSliders(g, 'elbowL'); }
+    { const g = addGroup('Pravá paže'); addJointSliders(g, 'shoulderR'); addJointSliders(g, 'elbowR'); }
+    { const g = addGroup('Levá noha');  addJointSliders(g, 'hipL'); addJointSliders(g, 'kneeL'); }
+    { const g = addGroup('Pravá noha'); addJointSliders(g, 'hipR'); addJointSliders(g, 'kneeR'); }
+
+    // === Copy JSON button (dočasně) ============================================
+    // Vyrobí JSON snapshot aktuální pózy ve formátu kompatibilním s makePose():
+    //   { angles: { jointName: { x?, y?, z? }, ... }, rootPosition?, rootRotation? }
+    // SupportPoints jsou nyní dynamické (joints jsou supports automaticky), v JSON
+    // se neexportují.
+    function buildPoseJSON() {
+        const angles = {};
+        skel.forEachJoint(j => {
+            if (j.dof === 0) return;
+            const cleaned = {};
+            for (const ax of j.axes) {
+                if (Math.abs(j.angles[ax]) > 0.05) {
+                    cleaned[ax] = Math.round(j.angles[ax] * 10) / 10;
+                }
+            }
+            if (Object.keys(cleaned).length > 0) angles[j.name] = cleaned;
+        });
+
+        const obj = { angles };
+
+        const rp = skel.rootPosition;
+        if (Math.abs(rp.x) > 0.01 || Math.abs(rp.y) > 0.01 || Math.abs(rp.z) > 0.01) {
+            obj.rootPosition = {
+                x: Math.round(rp.x * 100) / 100,
+                y: Math.round(rp.y * 100) / 100,
+                z: Math.round(rp.z * 100) / 100,
+            };
+        }
+        const rr = skel.rootRotation;
+        if (Math.abs(rr.x) > 0.5 || Math.abs(rr.y) > 0.5 || Math.abs(rr.z) > 0.5) {
+            obj.rootRotation = { x: Math.round(rr.x), y: Math.round(rr.y), z: Math.round(rr.z) };
+        }
+
+        return JSON.stringify(obj, null, 2);
+    }
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'mini';
+    copyBtn.textContent = 'Copy JSON';
+    copyBtn.title = 'Zkopíruj aktuální pózu jako JSON do clipboardu';
+    copyBtn.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(buildPoseJSON());
+            // Krátká vizuální zpětná vazba (CSS .flash class na 1.2 s)
+            copyBtn.classList.add('flash');
+            copyBtn.textContent = 'Zkopírováno!';
+            setTimeout(() => {
+                copyBtn.classList.remove('flash');
+                copyBtn.textContent = 'Copy JSON';
+            }, 1200);
+        } catch (err) {
+            // Clipboard API selže např. mimo HTTPS / localhost — log do konzole
+            console.error('Clipboard zápis selhal:', err);
+            copyBtn.textContent = 'Chyba (viz konzole)';
+        }
+    });
+    slidersContainer.appendChild(copyBtn);
+
+    // =========================================================================
+    // 4. Levý panel — pose presety
+    // =========================================================================
+    // Filter: vlastní Pose instance z modulu (sady jako BASIC_POSES jsou plain
+    // objekty, makePose je funkce — odfiltruje je test 'angles' in val).
+    const poseList = Object.entries(Poses)
+        .filter(([key, val]) => val && typeof val === 'object'
+                                     && 'angles' in val
+                                     && 'rootRotation' in val)
+        .map(([key, pose]) => ({ key, pose }));
+
+    const posesContainer = document.getElementById('poses-list');
+    const poseButtons = {};
+
+    // === Pose transitions =====================================================
+    // Plynulý přechod mezi current pose a target přes Pose.lerp + cubic ease-out
+    // (= "rozletí a brzdí"). transition stav drží render loop, který ho každý
+    // frame interpoluje. Když je null, nic se neděje.
+    let transition = null;
+    const TRANSITION_DURATION = 0.6;                 // sekundy
+
+    function applyReset() {
+        // Reset = přechod na rest pose (= prázdná Pose, všechny úhly 0)
+        startTransition(new Pose('rest'), 'reset');
+    }
+
+    function applyPose(key, pose) {
+        startTransition(pose, key);
+    }
+
+    /** Random pose — všechny DOF náhodně v rámci jejich limitů. Root nezasahujeme. */
+    function applyRandom() {
+        const target = new Pose('random');
+        skel.forEachJoint(j => {
+            if (j.dof === 0) return;
+            target.angles[j.name] = {};
+            for (const ax of j.axes) {
+                const [min, max] = j.limits[ax];
+                // lerp z [0,1) → [min, max] = uniform random v limitech
+                target.angles[j.name][ax] = min + Math.random() * (max - min);
+            }
+        });
+        startTransition(target, 'random');
+    }
+
+    /** Spustí přechod z aktuálního stavu kostry do `targetPose`. */
+    function startTransition(targetPose, key) {
+        // Capture aktuální stav jako "from" pose (drží i rootPos/Rot/supportPoints)
+        const from = Pose.capture(skel, 'from');
+        transition = { from, to: targetPose, t: 0 };
+        // UI: aktivní tlačítko hned, před dokončením přechodu
+        for (const k in poseButtons) poseButtons[k].classList.toggle('active', k === key);
+    }
+
+    /** Po každé změně modelu (transition tick / slider / preset) sync UI. */
+    function refreshAfterModelChange() {
+        skel.snapToFloor(FLOOR_Y);                  // snap je vždy ON
+        // Refresh všechny slidery (klouby + root pos + root rotation)
+        allSliders.forEach(s => s.refresh());
+    }
+
+    function addPoseButton(key, label, onClick) {
+        const btn = document.createElement('button');
+        btn.className = 'pose-btn';
+        btn.textContent = label;
+        btn.addEventListener('click', onClick);
+        posesContainer.appendChild(btn);
+        poseButtons[key] = btn;
+    }
+
+    function addPoseSection(title) {
+        const h = document.createElement('h4');
+        h.className = 'pose-section';
+        h.textContent = title;
+        posesContainer.appendChild(h);
+    }
+
+    // === Layout levého panelu ===
+    // 1. Reset + Random (globální nástroje, působí na celou kostru)
+    // 2. Sekce "LEHY" — pózy z LIE_POSES v jejich export pořadí
+    // 3. Sekce "Ostatní" — zbytek poses (= ne-leh)
+    addPoseButton('reset', 'Reset (rest)', applyReset);
+    addPoseButton('random', 'Random', applyRandom);
+
+    // Sekce LEHY — pózy z Poses.LIE_POSES (= layBack, layStarfish, …)
+    const lieKeys = Object.keys(Poses.LIE_POSES);
+    addPoseSection('LEHY');
+    for (const key of lieKeys) {
+        const pose = Poses.LIE_POSES[key];
+        addPoseButton(key, pose.name, () => applyPose(key, pose));
+    }
+
+    // Sekce Ostatní — všechno z library mimo LIE_POSES
+    addPoseSection('Ostatní');
+    for (const { key, pose } of poseList) {
+        if (lieKeys.includes(key)) continue;
+        addPoseButton(key, pose.name, () => applyPose(key, pose));
+    }
+
+    // =========================================================================
+    // 5. Spodní panel — debug toggles + Root Y + Snap
+    // =========================================================================
+    const togglesContainer = document.getElementById('debug-toggles');
+
+    // Toggles. CoM a Gravity sdílejí jedno tlačítko (gravita je kreslená z CoM
+    // dolů, logicky patří k CoM vizualizaci). Tooltip běží vždy ON, žádný button.
+    const toggleDefs = [
+        { key: 'com',     label: 'CoM',     defaultOn: true },
+        { key: 'support', label: 'Support', defaultOn: true },
+        { key: 'body',    label: 'Body markery', defaultOn: true },
+    ];
+    for (const def of toggleDefs) {
+        const el = document.createElement('div');
+        el.className = 'toggle' + (def.defaultOn ? ' on' : '');
+        el.innerHTML = `<div class="led"></div><span>${def.label}</span>`;
+        el.addEventListener('click', () => {
+            const newState = !el.classList.contains('on');
+            el.classList.toggle('on', newState);
+            debug.setVisible(def.key, newState);
+            // CoM toggle ovládá i gravity vrstvu (sdílený UI control)
+            if (def.key === 'com') debug.setVisible('gravity', newState);
+        });
+        togglesContainer.appendChild(el);
+    }
+
+    // Snap je vždy ON: root.y slider je trvale disabled (= read-only zobrazení
+    // aktuální hodnoty po snapu). Při startu jednou zavoláme snap, ať root.y
+    // odpovídá rest pose realitě, a slider zreflektuje tu hodnotu.
+    if (rootPosYSlider) {
+        rootPosYSlider.input.disabled = true;
+        rootPosYSlider.input.style.opacity = '0.4';
+    }
+    skel.snapToFloor(FLOOR_Y);
+    if (rootPosYSlider) rootPosYSlider.refresh();
+    view.update();
+
+    // =========================================================================
+    // 6. Render loop — pose transition tick + view/debug update
+    // =========================================================================
+    scene.onUpdate((dt) => {
+        // Transition krok: interpoluj 'from' a 'to' s cubic ease-out
+        // (= startuje rychle, dobržďuje na konci → "rozletí" a doráží)
+        if (transition) {
+            transition.t += dt / TRANSITION_DURATION;
+            if (transition.t >= 1) {
+                transition.to.apply(skel);            // finální stav = přesně cílová póza
+                transition = null;
+            } else {
+                // ease-out cubic: f(t) = 1 - (1-t)³
+                const eased = 1 - Math.pow(1 - transition.t, 3);
+                const lerped = Pose.lerp(transition.from, transition.to, eased);
+                lerped.apply(skel);
+            }
+            refreshAfterModelChange();
+        }
+        view.update();
+        debug.update();
+    });
+    scene.start();
+</script>
+</body>
+</html>

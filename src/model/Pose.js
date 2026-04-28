@@ -12,9 +12,8 @@ export class Pose {
         this.angles = {};
         this.rootPosition = { x: 0, y: 0, z: 0 };
         this.rootRotation = { x: 0, y: 0, z: 0 };
-        // Body opory pro tuto pózu (např. ['wristL','wristR'] pro stoj na rukách).
-        // null = zachovat default kostry (= chodidla po skel.reset()).
-        this.supportPoints = null;
+        // Body opory NEJSOU součástí pózy — počítají se dynamicky z geometrie
+        // (Skeleton.getSupportPoints). Joints jsou supports automaticky.
     }
 
     /**
@@ -34,8 +33,6 @@ export class Pose {
         // Spread = shallow copy plain objektů
         pose.rootPosition = { ...skeleton.rootPosition };
         pose.rootRotation = { ...skeleton.rootRotation };
-        // Body opory — capture si je pamatuje, aby lerp(captured, …) fungovala konzistentně
-        pose.supportPoints = [...skeleton.supportPoints];
         return pose;
     }
 
@@ -47,8 +44,6 @@ export class Pose {
      * - Úhly: lineární interpolace per-osa. Pokud jeden z dvou pos kloub
      *   neuvádí, jeho hodnota = 0 (= rest pose) → interpolace s rest pose.
      * - rootPosition / rootRotation: lineární interpolace.
-     * - supportPoints: DISKRÉTNÍ skok v půli (t<0.5 → a, jinak b).
-     *   Body opory jsou množina, ne plynulý parametr — nelze interpolovat.
      */
     static lerp(a, b, t) {
         const result = new Pose(`${a.name || ''} → ${b.name || ''}`);
@@ -79,9 +74,6 @@ export class Pose {
                 a.rootRotation[ax] + (b.rootRotation[ax] - a.rootRotation[ax]) * t;
         }
 
-        // Support points — diskrétní (žádné "půl chodidla, půl ruky")
-        result.supportPoints = (t < 0.5) ? a.supportPoints : b.supportPoints;
-
         return result;
     }
 
@@ -99,9 +91,5 @@ export class Pose {
         }
         skeleton.rootPosition = { ...this.rootPosition };
         skeleton.rootRotation = { ...this.rootRotation };
-        // Pokud póza definuje vlastní body opory, přepíše default z reset()
-        if (this.supportPoints !== null) {
-            skeleton.supportPoints = [...this.supportPoints];
-        }
     }
 }
