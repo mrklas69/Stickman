@@ -4,17 +4,20 @@
 //
 // Vrstvy:
 //   - 'com'      → zelená sféra na CoM + projekce na podlahu (delegace na view)
-//   - 'support'  → oranžové sféry support pointů + polygon na podlaze (delegace)
 //   - 'gravity'  → žlutá šipka z CoM dolů (délka = vzdálenost CoM → podlaha)
 //   - 'body'     → žluté polokoule jako orientační body: nos (-Z hlavy)
 //                  + Anáhata = srdeční čakra (uprostřed hrudi, -Z trupu)
 //   - 'tooltip'  → mousehover nad kloubem/kostí/hlavou → floating panel
 //                  s názvem a metadaty (parent, DOF, limity, sign / délka, masa)
 //
-// Existující createCenterOfMassMarker / createSupportPolygonMarker zůstávají
-// v StickmanView (existující dema je používají přímo). DebugView je jen
-// orchestrátor: vyrobí všechny vrstvy najednou, dá jim per-vrstva toggle,
-// a v update() je drží sync se stavem modelu.
+// Joint sféry jsou samy magenta-pink (PAL.support) přímo ve StickmanView —
+// vizuální konvence "každý joint je potenciální support". Aktuální contact
+// body (= dotýkající se podlahy) se ZVLÁŠŤ nezvýrazňují; getSupportPoints()
+// existuje jen jako interní algoritmus pro Skeleton.isStable().
+//
+// Existující createCenterOfMassMarker zůstává v StickmanView (legacy dema
+// ji používají přímo). DebugView je jen orchestrátor: vyrobí všechny vrstvy
+// najednou, dá jim per-vrstva toggle, a v update() je drží sync se stavem.
 //
 // Použití:
 //   const debug = new DebugView(view, { floorY: -4 });
@@ -30,7 +33,7 @@ import * as THREE from 'three';
 import { PAL } from '../util/Palette.js';
 
 // Seznam podporovaných vrstev — single source of truth pro setVisible/isVisible
-const LAYERS = ['com', 'support', 'gravity', 'body', 'tooltip'];
+const LAYERS = ['com', 'gravity', 'body', 'tooltip'];
 
 export class DebugView {
     /**
@@ -50,10 +53,8 @@ export class DebugView {
         // Markery — vyrobíme všechny dopředu. Toggle = .visible flag (žádné add/remove).
         this._markers = {};
         this._markers.com     = this.view.createCenterOfMassMarker(this.floorY);
-        this._markers.support = this.view.createSupportPolygonMarker(this.floorY);
         this._markers.gravity = this._makeGravityArrow();
         this._markers.com.visible = false;
-        this._markers.support.visible = false;
         this._markers.gravity.visible = false;
 
         // Body markery (nos + anáhata) jsou v hierarchii postavy — rotují s hlavou/trupem.
@@ -83,7 +84,6 @@ export class DebugView {
     attachToScene(scene) {
         this._scene = scene;
         scene.add(this._markers.com);
-        scene.add(this._markers.support);
         scene.add(this._markers.gravity);
     }
 
@@ -157,9 +157,6 @@ export class DebugView {
         if (this._visible.com) {
             this.view.updateCenterOfMassMarker(this._markers.com);
         }
-        if (this._visible.support) {
-            this.view.updateSupportPolygonMarker(this._markers.support);
-        }
         if (this._visible.gravity) {
             this._updateGravityArrow();
         }
@@ -178,7 +175,6 @@ export class DebugView {
         }
         if (this._scene) {
             this._scene.remove(this._markers.com);
-            this._scene.remove(this._markers.support);
             this._scene.remove(this._markers.gravity);
         }
         this._bodyMarkers.forEach(m => {

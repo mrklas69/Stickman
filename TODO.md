@@ -17,6 +17,15 @@ Sloučí dema 01+02+03+05+07 do jedné stránky. Root **fixní** v prostoru (jen
 - [x] **Skeleton změny:** neck.y twist DOF (totalDOF 14→15), torso.x záklon -30°, elbow 170°, shoulder.z 120°, UPPER_ARM/FOREARM přerozděleno (0.18 / 0.215)
 - [x] **8 lehových pos** (`LIE_POSES`): layBack, layStarfish, layChill, laySide, layReader, layRecline
 - [x] **F1.5 Sjednocení joint = support** — supportPoints field deprecated (legacy getter), joints jsou supports automaticky, contact body se počítají dynamicky (Y ≤ min + tol). Sféry kloubů barva PAL.support.
+- [x] **F1.6 Sezení 6 — Inspector dotažený:**
+  - Support overlay smazán z DebugView (joint = support visualně přes barvu sfér; contact body interní pro `isStable`).
+  - Sekce `POSTOJE` + `SEDY/KLEKY` + `LEHY` v levém panelu (`STANCE_POSES`, `SIT_POSES`, `LIE_POSES`).
+  - 8 nových sed/klek pose: `sit` (Sed na židli — přepsán), `sitCross` (Turek), `sitLegsForward` (Dlouhý sed), `sitTuck` (Skrčený sed), `sitKneel` (Klek), `sitChild` (Dětský klek), `cat` (Kočka), `sitSide` (Polosed na boku). `laySide` doladěn (kolena symetrická).
+  - **DOF rozšíření**: `hipL/R.y` (vnější/vnitřní rotace stehna, [-35, 50]) + `shoulderL/R.y` (axiální rotace paže, [-100, 90]). totalDOF 15 → 19.
+  - **Limity rozšířené**: `kneeL/R.x.max` 130 → 165 (pata k zadku pro klek); `hipL/R.z.max` 60 → 80 (lotus, široký turek); `torso.z.max` 20 → 30 (lateral flexe).
+  - **Random** přepíná i `rootRotation` (všechny 3 osy ±180°).
+  - **Live slider proporcí** v Inspectoru (`Skeleton.setProportions` + `StickmanView.rebuildBones`): 6 multiplier sliderů (lumbar, hrudník, biceps, předloktí, stehno, lýtko, 0.5×–1.5×).
+  - Favicon fix `<link rel="icon" href="data:,">` (prevence 404).
 - [ ] Smazat `demos/demo01_static.html`, `demo02_poses.html`, `demo03_dof.html`, `demo05_com.html`, `demo07_snap.html` *(až po F2 — některé mohou ještě sloužit jako reference)*
 - [x] Aktualizovat `index.html` rozcestník + popis demo01
 

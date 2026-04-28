@@ -20,13 +20,13 @@ Kostra "Minimal" má **9 funkčních kloubů + 4 koncové body** (`headTop`, `wr
 ```
 pelvis (root, 0 DOF)
 ├── torso (3 DOF: x flexe, y twist, z lateral) ── neck (3: x, y, z) ── headTop (0)
-├── shoulderL (2: x, z) ── elbowL (1: x) ── wristL (0)
-├── shoulderR (2: x, z) ── elbowR (1: x) ── wristR (0)
-├── hipL (2: x, z) ── kneeL (1: x) ── ankleL (0)
-└── hipR (2: x, z) ── kneeR (1: x) ── ankleR (0)
+├── shoulderL (3: x, y, z) ── elbowL (1: x) ── wristL (0)
+├── shoulderR (3: x, y, z) ── elbowR (1: x) ── wristR (0)
+├── hipL (3: x, y, z) ── kneeL (1: x) ── ankleL (0)
+└── hipR (3: x, y, z) ── kneeR (1: x) ── ankleR (0)
 ```
 
-Suma DOF = **15** (přístup `skeleton.totalDOF`).
+Suma DOF = **19** (přístup `skeleton.totalDOF`).
 
 ### Klouby (joints)
 
@@ -37,10 +37,10 @@ Každý kloub má jméno, parent, lokální offset vůči parentu (rest pose), s
 | `pelvis` | 0 | — | virtuální root, jeho world = `rootPosition` + `rootRotation` |
 | `torso` | 3 | x, y, z | flexe trupu (x), twist páteře (y, body roll), lateral flexe (z, úklon) |
 | `neck` | 3 | x, y, z | předklon hlavy (x), twist hlavy ±90° (y), úklon hlavy (z) |
-| `shoulderL/R` | 2 | x, z | předpažení/zapažení (x), abdukce do strany (z) |
+| `shoulderL/R` | 3 | x, y, z | předpažení/zapažení (x), axiální rotace paže — turn-out/turn-in (y), abdukce do strany (z) |
 | `elbowL/R` | 1 | x | ohyb lokte |
-| `hipL/R` | 2 | x, z | předkop (x), roznožka (z) |
-| `kneeL/R` | 1 | x | ohyb kolena (lýtko dozadu) |
+| `hipL/R` | 3 | x, y, z | předkop (x), vnější/vnitřní rotace stehna — turn-out/turn-in (y), roznožka (z) |
+| `kneeL/R` | 1 | x | ohyb kolena (lýtko dozadu, max 165° = pata k zadku pro klek) |
 
 ### Kosti (bones)
 
@@ -71,6 +71,8 @@ Stav kostry, kdy všechny `joint.angles` jsou 0: postava stojí svisle, ruce vis
 ### Proporce
 
 Funkce `buildProportions(H)` v `Skeleton.js` vrací všechny délky kostí, poloměry kloubů a hmotnosti relativně k výšce postavy `H`. Inspirace Vitruviem (≈ 8 hlav). Změna proporcí = jediný zdroj pravdy: editovat `buildProportions`, neměnit číslo na dvou místech.
+
+**Live ladění** (od Sezení 6): `Skeleton.setProportions(patch)` aktualizuje proporce + per-joint `localOffset`. View pak musí zavolat `view.rebuildBones()` (kosti mají fixní délku v `CylinderGeometry`, musí se přebudovat). Inspector demo má sekci "Proporce (× default)" s 6 slidery (lumbar, hrudník, biceps, předloktí, stehno, lýtko) jako multiplier 0.5×–1.5×.
 
 ---
 
@@ -111,13 +113,13 @@ V projektu se zobrazuje jako **zelená sféra** (s `depthTest: false`, ať není
 
 ### Support polygon / Body opory
 
-**Joints jsou supports automaticky.** Žádný explicitní `supportPoints` field — `Skeleton.getSupportPoints()` vrací **dynamic contact body**: ty klouby, jejichž world Y je blízko nejnižšího (do tolerance `0.04 × H`).
+**Joints jsou supports automaticky** — vizuální konvence (sféry kloubů barvou `PAL.support` magenta-pink). `Skeleton.getSupportPoints()` vrací **dynamic contact body** (klouby s Y blízko nejnižšího, tolerance `0.04 × H`) — používá se **interně** pro `isStable()`, **vizuálně se nezvýrazňuje** (od Sezení 6 odebráno z DebugView).
 
 Pro stand pose: contact = `{ankleL, ankleR}` (= 2 body s Y na floor, ostatní výš).
 Pro layBack: contact = `{headTop, shoulderL/R, pelvis, ankleL/R}` (= 6 bodů, všichni Y = floor).
 Pro single-leg stoj: contact = `{ankleL}` (= 1 bod, druhá noha pokrčená výš).
 
-**Convex hull** contact body v rovině XZ je **support polygon** (oblast podpory).
+**Convex hull** contact body v rovině XZ je **support polygon** (oblast podpory) — počítá se jen pro `isStable()` test.
 
 Legacy `Skeleton.supportPoints` getter zachován pro stará dema (vrací jména contact joints).
 
@@ -183,7 +185,12 @@ Lineární interpolace mezi dvěma pózami pro `t ∈ [0,1]`:
 
 ### Pose library
 
-`src/library/Poses.js` — single source of truth pro pojmenované pózy. Aktuálně: `stand`, `tpose`, `sit`, `squat`, `wave`, `oneLegL/R`, `lunge`, `leanForward`, …
+`src/library/Poses.js` — single source of truth pro pojmenované pózy. Organizované do exportovaných sad podle UI sekce v Inspectoru:
+
+- **`STANCE_POSES`** (POSTOJE): `stand`, `tpose`, `wave`, `squat`
+- **`SIT_POSES`** (SEDY/KLEKY): `sit`, `sitCross`, `sitLegsForward`, `sitTuck`, `sitKneel`, `sitChild`, `cat`, `sitSide`
+- **`LIE_POSES`** (LEHY): `layBack`, `layStarfish`, `layChill`, `laySide`, `layReader`, `layRecline`
+- **Ostatní** (= ne v žádné sadě): `oneLegL/R`, `lunge`, `leanForward`, `kapalasana`, `pincha`
 
 **Pravidlo:** pózy se definují jen v `library/Poses.js`. Dema je nedefinují znovu — importují.
 

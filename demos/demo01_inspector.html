@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Demo 01 — Inspector</title>
+    <link rel="icon" href="data:,">                  <!-- KISS: zabrání 404 favicon -->
+
     <style>
         body { margin: 0; overflow: hidden; background: #1a1a22;
                font-family: sans-serif; color: #ddd; }
@@ -190,11 +192,12 @@
     debug.attachToScene(scene.scene);
     debug.setRaycaster(scene.renderer.domElement, scene.camera);
 
-    // Default = vše zapnuté (CoM + gravity, Support, Body markery, Tooltip).
+    // Default = vše zapnuté (CoM + gravity, Body markery, Tooltip).
     // Tooltip je vždy ON (žádné UI tlačítko); ostatní mají toggles dole.
+    // Joint sféry jsou samy magenta = "joint = support" (visuální konvence,
+    // součást view); contact body / polygon se vizuálně nezvýrazňují.
     debug.setVisible('com', true);
     debug.setVisible('gravity', true);
-    debug.setVisible('support', true);
     debug.setVisible('body', true);
     debug.setVisible('tooltip', true);
 
@@ -278,14 +281,18 @@
         'neck.y':      'twist hlavy — kladně = otočení doprava',
         'neck.z':      'úklon hlavy do strany',
         'shoulderL.x': 'levá paže: předpažení (+) / zapažení (−)',
+        'shoulderL.y': 'levá paže: vnější rotace paže (palec ven, +) / vnitřní (palec dovnitř, −)',
         'shoulderL.z': 'levá paže: abdukce ven od trupu',
         'shoulderR.x': 'pravá paže: předpažení (+) / zapažení (−)',
+        'shoulderR.y': 'pravá paže: vnější rotace paže (palec ven, +) / vnitřní (palec dovnitř, −)',
         'shoulderR.z': 'pravá paže: abdukce ven od trupu',
         'elbowL.x':    'levý loket: ohyb (předloktí kupředu)',
         'elbowR.x':    'pravý loket: ohyb (předloktí kupředu)',
         'hipL.x':      'levá kyčel: předkop (+) / zákop (−)',
+        'hipL.y':      'levá kyčel: vnější rotace stehna (turn-out, +) / vnitřní (turn-in, −)',
         'hipL.z':      'levá kyčel: roznožka ven (+) / addukce (−)',
         'hipR.x':      'pravá kyčel: předkop (+) / zákop (−)',
+        'hipR.y':      'pravá kyčel: vnější rotace stehna (turn-out, +) / vnitřní (turn-in, −)',
         'hipR.z':      'pravá kyčel: roznožka ven (+) / addukce (−)',
         'kneeL.x':     'levé koleno: ohyb (lýtko dozadu)',
         'kneeR.x':     'pravé koleno: ohyb (lýtko dozadu)',
@@ -355,6 +362,63 @@
     { const g = addGroup('Pravá paže'); addJointSliders(g, 'shoulderR'); addJointSliders(g, 'elbowR'); }
     { const g = addGroup('Levá noha');  addJointSliders(g, 'hipL'); addJointSliders(g, 'kneeL'); }
     { const g = addGroup('Pravá noha'); addJointSliders(g, 'hipR'); addJointSliders(g, 'kneeR'); }
+
+    // === Proporce — slidery jako multiplier (0.5×—1.5× default) ============
+    // Default hodnoty z buildProportions (před multiplier × H).
+    const PROP_DEFAULTS = {
+        LOWER_TORSO: 0.16,
+        UPPER_TORSO: 0.16,
+        UPPER_ARM:   0.180,
+        FOREARM:     0.215,
+        THIGH:       0.245,
+        SHIN:        0.245,
+    };
+    const PROP_LABELS = {
+        LOWER_TORSO: 'lumbar',
+        UPPER_TORSO: 'hrudník',
+        UPPER_ARM:   'biceps',
+        FOREARM:     'předloktí',
+        THIGH:       'stehno',
+        SHIN:        'lýtko',
+    };
+    // Při změně proporce: aktualizuj skeleton, přebuduj kosti, snap, render.
+    function applyPropsMultiplier(key, mult) {
+        const newValue = PROP_DEFAULTS[key] * mult * H;
+        skel.setProportions({ [key]: newValue });
+        view.rebuildBones();
+        skel.snapToFloor(FLOOR_Y);
+        if (rootPosYSlider) rootPosYSlider.refresh();
+        view.update();
+    }
+    {
+        const g = addGroup('Proporce (× default)');
+        for (const key of Object.keys(PROP_DEFAULTS)) {
+            // Slider je multiplier 0.5—1.5. Step 0.01 = drobné ladění.
+            // V allSliders ho neevidujeme — refresh sliderů po pose.apply by jinak
+            // pose neumí ovlivnit (proporce nejsou součást pose).
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.innerHTML = `
+                <label>${PROP_LABELS[key]}</label>
+                <input type="range" min="0.5" max="1.5" step="0.01" value="1.00">
+                <span class="value">1.00</span>
+            `;
+            const input = row.querySelector('input');
+            const valueEl = row.querySelector('.value');
+            input.addEventListener('input', () => {
+                const v = parseFloat(input.value);
+                valueEl.textContent = v.toFixed(2);
+                applyPropsMultiplier(key, v);
+            });
+            // Dvojklik = reset na 1.00
+            input.addEventListener('dblclick', () => {
+                input.value = 1.00;
+                valueEl.textContent = '1.00';
+                applyPropsMultiplier(key, 1.00);
+            });
+            g.appendChild(row);
+        }
+    }
 
     // === Copy JSON button (dočasně) ============================================
     // Vyrobí JSON snapshot aktuální pózy ve formátu kompatibilním s makePose():
@@ -444,7 +508,11 @@
         startTransition(pose, key);
     }
 
-    /** Random pose — všechny DOF náhodně v rámci jejich limitů. Root nezasahujeme. */
+    /**
+     * Random pose — všechny DOF náhodně v rámci limitů + náhodná rootRotation
+     * v plném rozsahu sliderů [-180, 180]° na všech třech osách. rootPosition
+     * neměníme (snap-to-floor stejně přepočítá Y, X/Z = 0 je default).
+     */
     function applyRandom() {
         const target = new Pose('random');
         skel.forEachJoint(j => {
@@ -456,6 +524,12 @@
                 target.angles[j.name][ax] = min + Math.random() * (max - min);
             }
         });
+        // Root rotation — uniform [-180, 180]° na každé ose nezávisle
+        target.rootRotation = {
+            x: -180 + Math.random() * 360,
+            y: -180 + Math.random() * 360,
+            z: -180 + Math.random() * 360,
+        };
         startTransition(target, 'random');
     }
 
@@ -493,10 +567,28 @@
 
     // === Layout levého panelu ===
     // 1. Reset + Random (globální nástroje, působí na celou kostru)
-    // 2. Sekce "LEHY" — pózy z LIE_POSES v jejich export pořadí
-    // 3. Sekce "Ostatní" — zbytek poses (= ne-leh)
+    // 2. Sekce "POSTOJE"    — pózy z STANCE_POSES
+    // 3. Sekce "SEDY/KLEKY" — pózy z SIT_POSES v jejich export pořadí
+    // 4. Sekce "LEHY"       — pózy z LIE_POSES
+    // 5. Sekce "Ostatní"    — zbytek (= ne-postoj, ne-sed, ne-leh)
     addPoseButton('reset', 'Reset (rest)', applyReset);
     addPoseButton('random', 'Random', applyRandom);
+
+    // Sekce POSTOJE — pózy z Poses.STANCE_POSES (= stand, tpose, wave, squat)
+    const stanceKeys = Object.keys(Poses.STANCE_POSES);
+    addPoseSection('POSTOJE');
+    for (const key of stanceKeys) {
+        const pose = Poses.STANCE_POSES[key];
+        addPoseButton(key, pose.name, () => applyPose(key, pose));
+    }
+
+    // Sekce SEDY/KLEKY — pózy z Poses.SIT_POSES (= sitCross, sitKneel, cat, …)
+    const sitKeys = Object.keys(Poses.SIT_POSES);
+    addPoseSection('SEDY/KLEKY');
+    for (const key of sitKeys) {
+        const pose = Poses.SIT_POSES[key];
+        addPoseButton(key, pose.name, () => applyPose(key, pose));
+    }
 
     // Sekce LEHY — pózy z Poses.LIE_POSES (= layBack, layStarfish, …)
     const lieKeys = Object.keys(Poses.LIE_POSES);
@@ -506,10 +598,10 @@
         addPoseButton(key, pose.name, () => applyPose(key, pose));
     }
 
-    // Sekce Ostatní — všechno z library mimo LIE_POSES
+    // Sekce Ostatní — všechno z library mimo POSTOJE, SEDY/KLEKY a LEHY
     addPoseSection('Ostatní');
     for (const { key, pose } of poseList) {
-        if (lieKeys.includes(key)) continue;
+        if (stanceKeys.includes(key) || sitKeys.includes(key) || lieKeys.includes(key)) continue;
         addPoseButton(key, pose.name, () => applyPose(key, pose));
     }
 
@@ -522,7 +614,6 @@
     // dolů, logicky patří k CoM vizualizaci). Tooltip běží vždy ON, žádný button.
     const toggleDefs = [
         { key: 'com',     label: 'CoM',     defaultOn: true },
-        { key: 'support', label: 'Support', defaultOn: true },
         { key: 'body',    label: 'Body markery', defaultOn: true },
     ];
     for (const def of toggleDefs) {

@@ -31,27 +31,64 @@ export const tpose = makePose('T-pose', {
 });
 
 /**
- * Sed s ohnutými koleny — stehna vodorovně dopředu, lýtka svisle dolů.
- * Uvolněné ruce mírně dopředu pro "obydlený" vzhled.
+ * Sed na židli — neformální sed na neviditelné židli, s vědomou asymetrií:
+ * levá paže silně pokrčená do strany (= ruka u tváře / přes opěrku), pravá
+ * visí dolů uvolněně. Nohy pootočené (různý turn-out v kyčlích).
+ *
+ *   - torso.x = 8 → drobný předklon trupu
+ *   - neck.x = 15 → mírná flexe hlavy (kouká kupředu / dolů)
+ *   - hipL.x = 117, y = 50, z = -10 → silná flexe + max turn-out + addukce
+ *     (nohu jakoby přes druhou)
+ *   - hipR.x = 103, y = 21, z = -3 → flexe + drobný turn-out
+ *   - knee.x = 105 / 115 → mírně pokrčená kolena
+ *   - shoulderL.x = 33, y = -37, z = 54 → levá paže ven do strany,
+ *     vnitřní rotace
+ *   - elbowL.x = 140 → silně pokrčená levá (ruka k hlavě / přes opěrku)
+ *   - shoulderR.x = 44, y = -55 → pravá paže drobně předpažená dolů,
+ *     výrazná vnitřní rotace
+ *   - elbowR.x = 60 → mírně pokrčená pravá
+ *
+ * Body opory: pelvis + paty (po snapu) — postava balancuje na neviditelné
+ * židli, kolena ji nesou.
  */
-export const sit = makePose('Sit', {
-    hipL:  { x: 90 },
-    hipR:  { x: 90 },
-    kneeL: { x: 90 },
-    kneeR: { x: 90 },
-    neck:  { x: 15 },
-    shoulderL: { x: 30 },
-    shoulderR: { x: 30 },
-    elbowL: { x: 60 },
-    elbowR: { x: 60 },
+export const sit = makePose('Sed na židli', {
+    torso:     { x: 8 },
+    neck:      { x: 15 },
+    shoulderL: { x: 33, y: -37, z: 54 },
+    elbowL:    { x: 140 },
+    shoulderR: { x: 44, y: -55 },
+    elbowR:    { x: 60 },
+    hipL:      { x: 117, y: 50, z: -10 },
+    kneeL:     { x: 105 },
+    hipR:      { x: 103, y: 21, z: -3 },
+    kneeR:     { x: 115 },
 });
 
-/** Sed s nataženýma nohama (= postava sedí, nohy vpřed jako na zemi). */
-export const sitLegsForward = makePose('Sed (nohy vpřed)', {
-    hipL: { x: 90 },
-    hipR: { x: 90 },
-    shoulderL: { x: -20 },
-    shoulderR: { x: -20 },
+/**
+ * Dlouhý sed (dandasana) — postava sedí na zemi s nataženými nohami vpřed,
+ * ruce opřené trochu vzadu (dlaně na zemi za pánví). Žádná rotace kostry.
+ *   - torso.x = 3 → drobný předklon trupu (uvolněný sed)
+ *   - hip.x = 90 → flexe (stehna kupředu vodorovně)
+ *   - hip.y = -8 → mírná vnitřní rotace (špičky lehce dovnitř, paralelní paty)
+ *   - hip.z = 12 → mírná abdukce
+ *   - knee.x = 12 → soft ohyb kolen
+ *   - shoulder.x = -33 → zapažení (ruce dozadu k opěrnému bodu)
+ *   - shoulder.y = -18 → vnitřní rotace paže (palec dovnitř, dlaně dolů na zem)
+ *   - shoulder.z = 20 → abdukce (ruce ven od trupu, mimo pánev)
+ *   - elbow.x = 18 → drobný ohyb lokte
+ *
+ * Body opory (dynamic): pelvis + paty + zápěstí (opřené dlaně).
+ */
+export const sitLegsForward = makePose('Dlouhý sed', {
+    torso:     { x: 3 },
+    hipL:      { x: 90, y: -8, z: 12 },
+    hipR:      { x: 90, y: -8, z: 12 },
+    kneeL:     { x: 12 },
+    kneeR:     { x: 12 },
+    shoulderL: { x: -33, y: -18, z: 20 },
+    shoulderR: { x: -33, y: -18, z: 20 },
+    elbowL:    { x: 18 },
+    elbowR:    { x: 18 },
 });
 
 /** Plný dřep — kyčle a kolena na maximu, ruce vpřed pro rovnováhu. */
@@ -251,35 +288,32 @@ export const layChill = makePose('Leh na zádech – pohoda', {
 layChill.rootRotation = { x: 90, y: 0, z: 0 };
 
 /**
- * Leh na pravém boku – spaní. Postava leží na pravém boku, nohy pokrčené
- * přes sebe (horní = levá víc pokrčená), ruce složené v "modlitbě" pod tváří.
+ * Leh na pravém boku – spaní. Postava leží na pravém boku, nohy obě podobně
+ * pokrčené, ruce složené před tváří (= "modlitba", spánková poloha).
  *
  *   - rootRotation.z = -90 → otočení kolem osy Z (= leh na pravém boku;
  *     postavova vertikální osa +Y → world +X, pravá strana +X → world -Y dolů).
- *   - shoulder.x = 90, z = 5 → obě paže kupředu, lehce dovnitř (k sobě)
- *   - elbow.x = 90 → předloktí kolmá k paži (= ruce před tváří)
  *   - neck.x = 15 → hlava lehce předkloněná (přirozené pro spánek)
- *   - hipL větší flexe + hipR menší → horní noha víc pokrčená (spánková poloha)
+ *   - shoulder.x = 90/95 → obě paže předpažené (kupředu před tělo)
+ *   - shoulder.z asymetrické (-30 vs -12) → záměrná asymetrie ramen:
+ *     levá (horní) víc dovnitř k tváři, pravá (spodní) méně — podpírá hlavu
+ *   - elbow.x = 90 → předloktí kolmá k paži (= ruce před tváří)
+ *   - hipL.x = 40, hipL.z = -10 → horní noha mírně dopředu, lehce přitisknutá
+ *   - hipR.x = 27 → spodní noha drobně méně pokrčená v kyčli
+ *   - knee.x = 95 → obě kolena podobně pokrčená (klasická spánková poloha)
  *
  * Body opory: pravá strana těla — shoulderR, pelvis, hipR, kneeR, ankleR.
  */
 export const laySide = makePose('Leh na boku – spaní', {
     neck:      { x: 15 },
-    // Asymetrie ramen je záměrná: levá ruka víc dovnitř (= horní v boku, k tváři),
-    // pravá méně dovnitř (= spodní, podpírá hlavu).
     shoulderL: { x: 90, z: -30 },
     elbowL:    { x: 90 },
     shoulderR: { x: 95, z: -12 },
     elbowR:    { x: 90 },
-    // Addukce hipL/R kompenzuje strukturální HIP_X offset tak, aby ankleL/R.X
-    // v lokálu pelvisu byl ≈ 0 → po Rz(-90°) jsou kotníky ve world Y = pelvis Y.
-    // Hodnoty počítané: hipL.z = -arcsin(HIP_X / |kneeL_chain|) pro horní nohu,
-    // hipR.z = -arcsin(HIP_X / |kneeR_chain|) pro spodní; chain délka liší podle
-    // flexe v koleni → asymetrické hodnoty.
-    hipL:      { x: 60, z: -12 },             // horní noha
-    kneeL:     { x: 90 },
-    hipR:      { x: 30, z: -8 },              // spodní noha
-    kneeR:     { x: 60 },
+    hipL:      { x: 40, z: -10 },
+    kneeL:     { x: 95 },
+    hipR:      { x: 27 },
+    kneeR:     { x: 95 },
 });
 laySide.rootRotation = { x: 0, y: 0, z: -90 };
 
@@ -297,6 +331,194 @@ export const layReader = makePose('Leh na břiše – čtenář', {
 });
 layReader.rootRotation = { x: -70, y: 0, z: 0 };
 
+// === SEDY (sitting poses) ===================================================
+// Postava sedí na zemi nebo v dřepu. Pelvis (root) buď nad zemí (klek, dřep,
+// turek = pelvis na patách / pod hýždí) nebo přímo na zemi (dlouhý sed,
+// skrčený sed, polosed na boku). Snap-to-floor srovná nejnižší joint.
+
+/**
+ * Turek (sukhasana) — sed se zkříženýma nohama, kolena do stran, pelvis na zemi.
+ *   - rootRotation.x = 16 → mírný záklon kostry (= kompenzuje předklon trupu,
+ *     výsledek je trup vzpřímený nad pelvisem)
+ *   - hip.x = 140 → max flexe (stehna přitisknutá k trupu, pelvis sedne na zem)
+ *   - hip.y = 50 → vnější rotace stehna (turn-out) — bez ní by lýtka šla ven,
+ *                  s ní jdou pod druhé stehno (= zkřížení pat pod pánví)
+ *   - hip.z = 60 → abdukce (kolena ven do strany — symetrické)
+ *   - knee.x = 130 → max ohyb (lýtko zalomené dolů a dovnitř)
+ *   - torso.x = 12 → mírný předklon trupu (váha pánve dopředu mezi kolena)
+ *   - shoulder.x = -27 → ruce zapažené (= uvolněně přes stehna dolů)
+ *   - shoulder.z = 19 → mírná abdukce (ruce ven od trupu, ne přitisknuté)
+ *
+ * Body opory: pelvis + kolena + kotníky/paty.
+ */
+export const sitCross = makePose('Turek', {
+    torso:     { x: 12 },
+    hipL:      { x: 140, y: 50, z: 60 },
+    hipR:      { x: 140, y: 50, z: 60 },
+    kneeL:     { x: 130 },
+    kneeR:     { x: 130 },
+    shoulderL: { x: -27, z: 19 },
+    shoulderR: { x: -27, z: 19 },
+});
+sitCross.rootRotation = { x: 16, y: 0, z: 0 };
+
+/**
+ * Skrčený sed — kolena přitažená k hrudi, ruce objímají kolena z venku.
+ *   - rootRotation.x = 10 → mírný záklon kostry (kompenzuje předklon trupu)
+ *   - torso.x = 20 → předklon trupu (hlava nad kolena)
+ *   - neck.x = -5 → mírný záklon hlavy (kouká přes kolena dopředu, ne na ně)
+ *   - hip.x = 140 → max flexe (stehna těsně k trupu)
+ *   - hip.z = -6 → mírná addukce (kolena lehce u sebe)
+ *   - knee.x = 130 → max ohyb (lýtka přitažená ke stehnům)
+ *   - shoulder.x = 52 → mírné předpažení (ruce kupředu nad kolena)
+ *   - shoulder.y = -90 → silná vnitřní rotace (palec dovnitř, dlaň ven —
+ *                       paže obtáčí koleno z venku, ne přes hřbet)
+ *   - shoulder.z = 15 → abdukce (lokty trochu ven, kolem kolen)
+ *   - elbow.x = 70 → ohnutý loket (předloktí jde dolů kolem holení)
+ *
+ * Body opory: pelvis + paty. Trup vyvážený dopředu nad nohama.
+ */
+export const sitTuck = makePose('Skrčený sed', {
+    torso:     { x: 20 },
+    neck:      { x: -5 },
+    hipL:      { x: 140, z: -6 },
+    hipR:      { x: 140, z: -6 },
+    kneeL:     { x: 130 },
+    kneeR:     { x: 130 },
+    shoulderL: { x: 52, y: -90, z: 15 },
+    shoulderR: { x: 52, y: -90, z: 15 },
+    elbowL:    { x: 70 },
+    elbowR:    { x: 70 },
+});
+sitTuck.rootRotation = { x: 10, y: 0, z: 0 };
+
+/**
+ * Klek (vajrasana) — pelvis na patách, lýtka pod stehny, mírně předkloněný trup.
+ *   - rootRotation.x = -16 → mírný předklon kostry (vrch postavy dopředu)
+ *   - torso.x = -6 → mírný záklon trupu (částečná kompenzace předklonu)
+ *   - neck.x = -10 → záklon hlavy (kouká před sebe, lehce vzhůru)
+ *   - hip.x = 87 → flexe (stehna ~71° vpřed po součtu s rootRotation)
+ *   - hip.y = -35 → vnitřní rotace stehna (kolena drobně dovnitř)
+ *   - hip.z = 9 → mírná abdukce (kolena lehce ven od pánve)
+ *   - knee.x = 165 → max ohyb (= proto jsme zvedli limit z 130; pata k zadku)
+ *   - shoulder.x = -6, y = -15, z = 7 → ruce uvolněně dolů, drobně do stran
+ *   - elbow.x = 60 → loket lehce pokrčený
+ *
+ * Body opory: kolena + paty (= ankleL/R po snapu).
+ */
+export const sitKneel = makePose('Klek', {
+    torso:     { x: -6 },
+    neck:      { x: -10 },
+    hipL:      { x: 87, y: -35, z: 9 },
+    hipR:      { x: 87, y: -35, z: 9 },
+    kneeL:     { x: 165 },
+    kneeR:     { x: 165 },
+    shoulderL: { x: -6, y: -15, z: 7 },
+    shoulderR: { x: -6, y: -15, z: 7 },
+    elbowL:    { x: 60 },
+    elbowR:    { x: 60 },
+});
+sitKneel.rootRotation = { x: -16, y: 0, z: 0 };
+
+/**
+ * Dětský klek (balasana / child's pose) — klek s plným předklonem trupu na
+ * stehna, paže natažené dopředu po podlaze, čelo k zemi. Pozice odpočinku.
+ *
+ *   - rootRotation.x = -75 → silný předklon kostry (vrch postavy dopředu)
+ *   - torso.x = 30 → další předklon trupu (= trup položený na stehnech)
+ *   - neck.x = 60 → silná flexe hlavy (čelo k zemi)
+ *   - hip.x = 140 → max flexe (stehna těsně k trupu)
+ *   - hip.y = -18 → vnitřní rotace stehen (kolena dovnitř)
+ *   - hip.z = 14 → mírná abdukce
+ *   - knee.x = 153 → silný ohyb (sed na patách)
+ *   - shoulder.x = 165 → max předpažení (paže nahoru = po rotaci kostry dopředu na zemi)
+ *   - shoulder.y = -48 → vnitřní rotace paže (palec dovnitř, dlaně dolů na zemi)
+ *   - shoulder.z = 11 → drobná abdukce (paže lehce ven)
+ *   - elbow.x = 14 → téměř natažený loket (= dlaně dosáhnou vpřed)
+ *
+ * Body opory: kolena + paty + dlaně + čelo (= 5+ bodů, plně rozložená pozice).
+ */
+export const sitChild = makePose('Dětský klek', {
+    torso:     { x: 30 },
+    neck:      { x: 60 },
+    hipL:      { x: 140, y: -18, z: 14 },
+    hipR:      { x: 140, y: -18, z: 14 },
+    kneeL:     { x: 153 },
+    kneeR:     { x: 153 },
+    shoulderL: { x: 165, y: -48, z: 11 },
+    shoulderR: { x: 165, y: -48, z: 11 },
+    elbowL:    { x: 14 },
+    elbowR:    { x: 14 },
+});
+sitChild.rootRotation = { x: -75, y: 0, z: 0 };
+
+/**
+ * Kočka (marjaryasana / cat pose) — pozice na všech čtyřech, zaoblená záda
+ * a sklopená hlava (cat varianta z cat-cow cyklu).
+ *
+ *   - rootRotation.x = -83 → kostra téměř horizontálně dopředu (postava
+ *     na čtyřech, vrch těla míří k -Z)
+ *   - torso.x = -27 → záklon trupu (= zaoblený "hrb" v cat pozici)
+ *   - neck.x = 25 → flexe hlavy (brada k hrudi, hlava dolů)
+ *   - shoulder.x = 70, z = 5 → paže předpažené (po horizontalizaci kostry
+ *     to je "dolů k zemi" — dlaně na podlaze)
+ *   - hip.x = 82, z = 9 → stehna kolmá k trupu (kolena na podlaze)
+ *   - knee.x = 89 → lýtka kolmá ke stehnu (= lýtka na podlaze, prsty dozadu)
+ *
+ * Body opory: zápěstí + kolena (= klasický kvadrupedální čtyřbod).
+ */
+export const cat = makePose('Kočka', {
+    torso:     { x: -27 },
+    neck:      { x: 25 },
+    shoulderL: { x: 70, z: 5 },
+    shoulderR: { x: 70, z: 5 },
+    hipL:      { x: 82, z: 9 },
+    hipR:      { x: 82, z: 9 },
+    kneeL:     { x: 89 },
+    kneeR:     { x: 89 },
+});
+cat.rootRotation = { x: -83, y: 0, z: 0 };
+
+/**
+ * Polosed na boku — asymetrická relaxovaná pozice. Postava pootočená bokem,
+ * pravá paže silně pokrčená s rukou u tváře (jako "relax na louce"), levá
+ * paže přes tělo dopředu, levá noha silně pokrčená a roznožená, pravá
+ * natažená šikmo do strany.
+ *
+ * Klíč je rootRotation — celá kostra je naklopená:
+ *   - x = 86 → skoro plný záklon kostry (svislá osa kostry → cca horizontálně)
+ *   - y = -98 → otočení kolem world Y (= bok ke kameře místo čela)
+ *   - z = 7 → mírný úklon, doladění opřené strany
+ *
+ *   - torso.x = 30, y = 13, z = 30 → silný předklon + twist + max úklon trupu
+ *   - neck.x = -5, y = -8 → drobný záklon a twist hlavy
+ *   - shoulderL.x = 66, y = -63, z = -30 → levá paže předpažená napříč tělem,
+ *     silná vnitřní rotace (dlaň ven), addukce dovnitř
+ *   - elbowL.x = 48 → loket pokrčený
+ *   - shoulderR.x = 9, y = 27, z = 79 → pravá paže silně do strany, mírná
+ *     vnější rotace (dlaň vzhůru / palec ven)
+ *   - elbowR.x = 111 → silný ohyb (= ruka u hlavy / pod hlavou)
+ *   - hipL.x = 85, y = 50, z = 75 → levá noha silně pokrčená + max turn-out + široká abdukce
+ *   - kneeL.x = 125 → silný ohyb (lýtko pod stehno)
+ *   - hipR.x = 50, z = -10 → pravá noha dopředu, lehce dovnitř
+ *   - kneeR.x = 105 → mírně pokrčená
+ *
+ * Body opory: pelvis + pravé koleno + kotníky + pravé zápěstí.
+ */
+export const sitSide = makePose('Polosed na boku', {
+    torso:     { x: 30, y: 13, z: 30 },
+    neck:      { x: -5, y: -8 },
+    shoulderL: { x: 66, y: -63, z: -30 },
+    elbowL:    { x: 48 },
+    shoulderR: { x: 9, y: 27, z: 79 },
+    elbowR:    { x: 111 },
+    hipL:      { x: 85, y: 50, z: 75 },
+    kneeL:     { x: 125 },
+    hipR:      { x: 50, z: -10 },
+    kneeR:     { x: 105 },
+});
+sitSide.rootRotation = { x: 86, y: -98, z: 7 };
+
 // === Sady poses pro snadný import =========================================
 
 /** Základní pózy (vhodné pro většinu dem). */
@@ -307,6 +529,26 @@ export const BALANCE_POSES = { stand, tpose, wave, leanForward, oneLegL, oneLegR
 
 /** Pózy s hlavou jako součástí opory (vzhůru nohama). */
 export const HEAD_SUPPORT_POSES = { kapalasana, pincha };
+
+/** Postoje (= stojící pozice). Pořadí odpovídá UI sekci POSTOJE. */
+export const STANCE_POSES = {
+    stand,
+    tpose,
+    wave,
+    squat,
+};
+
+/** Sedové / klečové pózy. Pořadí odpovídá UI sekci SEDY/KLEKY. */
+export const SIT_POSES = {
+    sit,
+    sitCross,
+    sitLegsForward,
+    sitTuck,
+    sitKneel,
+    sitChild,
+    cat,
+    sitSide,
+};
 
 /** Lehové pózy (vodorovně, opora celý trup). Pořadí odpovídá UI sekci LEHY. */
 export const LIE_POSES = {

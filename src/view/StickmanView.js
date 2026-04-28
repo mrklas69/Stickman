@@ -147,6 +147,66 @@ export class StickmanView {
     }
 
     /**
+     * Přebuduje kosti + pivot pozice + sféry kloubů + hlavu podle aktuálních
+     * Skeleton proporcí. Volat po `skeleton.setProportions(patch)`.
+     *
+     * Nepřepisuje materiály ani úhly — jen geometrii a offsety. Kosti mají
+     * fixní délku v meshi (CylinderGeometry), takže staré meshe se musí dispose
+     * a vyrobit nové.
+     */
+    rebuildBones() {
+        const root = this.skeleton.root;
+
+        // 1. Pivot positions = nový localOffset (root pivot zůstává v origin)
+        for (const joint of Object.values(this.skeleton.joints)) {
+            if (joint === root) continue;
+            const obj = this.jointObjects[joint.name];
+            obj.position.set(joint.localOffset.x, joint.localOffset.y, joint.localOffset.z);
+        }
+
+        // 2. Joint sféry — sphere.position kopíruje pivot.position (sphere je dítě
+        //    parent obj, ne pivotu, takže sphere si drží vlastní position)
+        for (const [jointName, sphere] of Object.entries(this.jointSpheres)) {
+            const joint = this.skeleton.joints[jointName];
+            sphere.position.set(joint.localOffset.x, joint.localOffset.y, joint.localOffset.z);
+        }
+
+        // 3. Bone meshes — smaž staré, vyrob nové (CylinderGeometry má fixní délku)
+        for (const [boneName, oldMesh] of Object.entries(this.boneMeshes)) {
+            if (oldMesh.parent) oldMesh.parent.remove(oldMesh);
+            oldMesh.geometry.dispose();
+        }
+        this.boneMeshes = {};
+
+        // Rebuild via stejná logika jako _build, jen meshe (ne pivots/sféry)
+        const visit = (joint) => {
+            for (const child of joint.children) {
+                const boneType = this._boneTypeFor(joint, child);
+                if (boneType) {
+                    const mesh = this._makeBoneMesh(joint, child, boneType);
+                    mesh.castShadow = true;
+                    const key = `${joint.name}|${child.name}`;
+                    const boneName = BONE_NAMES[key] || `${joint.name}→${child.name}`;
+                    const length = Math.hypot(child.localOffset.x, child.localOffset.y, child.localOffset.z);
+                    const mass = this.skeleton.proportions.MASS[boneName];
+                    mesh.userData = {
+                        type: 'bone',
+                        name: boneName,
+                        parent: joint.name,
+                        child: child.name,
+                        length,
+                        mass,
+                    };
+                    this.jointObjects[joint.name].add(mesh);
+                    this.boneMeshes[boneName] = mesh;
+                }
+                visit(child);
+            }
+        };
+        visit(root);
+    }
+
+    /**
      * Pro hranu (parent → child) vrátí typ kosti k vykreslení nebo null
      * (= žádná viditelná kost — vizuálně součást něčeho jiného).
      */

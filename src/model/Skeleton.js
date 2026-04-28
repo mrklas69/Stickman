@@ -16,10 +16,10 @@
 // HIERARCHIE (Minimal):
 //   pelvis (root, 0 DOF)
 //   ├── torso (3) ── neck (3) ── headTop (0)
-//   ├── shoulderL (2) ── elbowL (1) ── wristL (0)
-//   ├── shoulderR (2) ── elbowR (1) ── wristR (0)
-//   ├── hipL (2) ── kneeL (1) ── ankleL (0)
-//   └── hipR (2) ── kneeR (1) ── ankleR (0)
+//   ├── shoulderL (3) ── elbowL (1) ── wristL (0)
+//   ├── shoulderR (3) ── elbowR (1) ── wristR (0)
+//   ├── hipL (3) ── kneeL (1) ── ankleL (0)
+//   └── hipR (3) ── kneeR (1) ── ankleR (0)
 // =============================================================================
 
 import { Joint } from './Joint.js';
@@ -156,8 +156,8 @@ export class Skeleton {
             ['x', 'y', 'z'],
             // x: -30 záklon (lumbar extension pro Sphinx/kobra), 30 předklon
             // y: ±45 twist (body roll v plavu)
-            // z: ±20 lateral flexe (úklon, anatomicky ~25-30°)
-            { x: [-30, 30], y: [-45, 45], z: [-20, 20] },
+            // z: ±30 lateral flexe (úklon, anatomicky ~25-30°)
+            { x: [-30, 30], y: [-45, 45], z: [-30, 30] },
             { x: -1, y: +1, z: +1 }
         );
 
@@ -186,13 +186,20 @@ export class Skeleton {
         // Předpažení (paže kupředu = -Z): vec(0,-1,0) +θ kolem +X = -Z pro +90°. signX = +1.
         // Anatomická abdukce (paže ven od těla, pro shoulderL = -X):
         //   vec(0,-1,0) -θ kolem +Z = -X pro -90° → potřeba -Three.js Z → signZ = -1.
+        // Axiální rotace paže (humeral internal/external rotation):
+        //   kladné = vnější rotace (palec ven, dlaň dopředu/nahoru). Pro shoulderL:
+        //   palec rest = -Z, vnější rotace → palec do -X (ven od těla = -X).
+        //   (-Z) → (-X) shora = proti směru hodin = Three.js +Y → signY = +1.
+        //   Limity asymetrické: vnitřní rotace ~70° (omezená lopatkou), vnější ~90°.
         const shoulderL = add('shoulderL', torso,
             { x: -p.SHOULDER_X, y: p.UPPER_TORSO, z: 0 },
-            ['x', 'z'],
+            ['x', 'y', 'z'],
             // x: -90 = paže za záda (extension), 200 = paže přes hlavu dozadu (hyperextenze
             //         pro plavce/gymnasty — reálně se kombinuje s body roll v torso.y)
-            { x: [-90, 200], z: [-30, 120] },
-            { x: +1, z: -1 }
+            // y: -100 = silná vnitřní rotace (palec dovnitř, dlaň ven — objetí kolen),
+            //   90 = vnější rotace (turn-out)
+            { x: [-90, 200], y: [-100, 90], z: [-30, 120] },
+            { x: +1, y: +1, z: -1 }
         );
         // Loket: ohyb předloktí kupředu. Vec(0,-1,0) +θ X = -Z pro +90°. signX = +1.
         const elbowL = add('elbowL', shoulderL,
@@ -208,11 +215,13 @@ export class Skeleton {
         // === Pravá paže (+X strana = postavova PRAVÁ) — zrcadlová abdukce ===
         // Anatomická abdukce (paže ven, pro shoulderR = +X):
         //   vec(0,-1,0) +θ kolem +Z = +X pro +90° → bez invertu → signZ = +1.
+        // Axiální rotace pro shoulderR: vnější rotace → palec do +X.
+        //   (-Z) → (+X) shora = ve směru hodin = Three.js -Y → signY = -1.
         const shoulderR = add('shoulderR', torso,
             { x: p.SHOULDER_X, y: p.UPPER_TORSO, z: 0 },
-            ['x', 'z'],
-            { x: [-90, 200], z: [-30, 120] },
-            { x: +1, z: +1 }
+            ['x', 'y', 'z'],
+            { x: [-90, 200], y: [-100, 90], z: [-30, 120] },
+            { x: +1, y: -1, z: +1 }
         );
         const elbowR = add('elbowR', shoulderR,
             { x: 0, y: -p.UPPER_ARM, z: 0 },
@@ -227,18 +236,25 @@ export class Skeleton {
         // === Levá noha (-X) ===
         // Předkop (noha kupředu = -Z): stejně jako rameno, signX = +1.
         // Roznožka (noha ven, -X): jako abdukce shoulderL, signZ = -1.
+        // Vnější/vnitřní rotace stehna (femur axial rotation): kladné = turn-out
+        // (pata k sobě, špička ven). Pro hipL: vnější rotace = patela do -X
+        // = Three.js +Y (proti směru hodin shora) → signY = +1.
+        // Limity asymetrické dle anatomie: vnitřní rotace ~35°, vnější ~50°.
         const hipL = add('hipL', pelvis,
             { x: -p.HIP_X, y: 0, z: 0 },
-            ['x', 'z'],
+            ['x', 'y', 'z'],
             // x: -30 = záklop, 140 = hluboký předkop (klečení, hluboký dřep, yoga)
-            { x: [-30, 140], z: [-10, 60] },
-            { x: +1, z: -1 }
+            // y: -35 = vnitřní rotace (turn-in), 50 = vnější rotace (turn-out, turek)
+            { x: [-30, 140], y: [-35, 50], z: [-10, 80] },
+            { x: +1, y: +1, z: -1 }
         );
         // Koleno: ohyb (lýtko dozadu = +Z). Vec(0,-1,0) -θ X = +Z pro -90°. signX = -1.
         const kneeL = add('kneeL', hipL,
             { x: 0, y: -p.THIGH, z: 0 },
             ['x'],
-            { x: [0, 130] },
+            // x: 0 = natažené, 165 = pata k zadku (vajrasana / klek). Reálná
+            //    anatomie ~140-150°; 165° je liberální pro pose-driven hands-on.
+            { x: [0, 165] },
             { x: -1 }
         );
         add('ankleL', kneeL,
@@ -246,21 +262,58 @@ export class Skeleton {
         );
 
         // === Pravá noha (+X) ===
+        // Vnější rotace pro hipR: patela do +X = Three.js -Y → signY = -1
+        // (zrcadlově k hipL, jako shoulder.z signs).
         const hipR = add('hipR', pelvis,
             { x: p.HIP_X, y: 0, z: 0 },
-            ['x', 'z'],
-            { x: [-30, 140], z: [-10, 60] },
-            { x: +1, z: +1 }
+            ['x', 'y', 'z'],
+            { x: [-30, 140], y: [-35, 50], z: [-10, 80] },
+            { x: +1, y: -1, z: +1 }
         );
         const kneeR = add('kneeR', hipR,
             { x: 0, y: -p.THIGH, z: 0 },
             ['x'],
-            { x: [0, 130] },
+            { x: [0, 165] },                                 // viz kneeL — limit 165° (vajrasana)
             { x: -1 }
         );
         add('ankleR', kneeR,
             { x: 0, y: -p.SHIN, z: 0 }
         );
+    }
+
+    /**
+     * Aktualizuje proporce a přepočítá lokální offsety dotčených jointů.
+     * View musí pak zavolat `rebuildBones()` na sebe (geometrie kostí drží
+     * fixní délku v meshi → musí se přebudovat).
+     *
+     * @param {Object} patch - parciální patch nad `this.proportions`
+     *                        (např. { THIGH: 2.0, UPPER_ARM: 1.5 })
+     */
+    setProportions(patch) {
+        const props = this.proportions;
+        Object.assign(props, patch);
+        // Derived: TORSO_LENGTH se přepočítá pokud se mění některá z půlek
+        if ('LOWER_TORSO' in patch || 'UPPER_TORSO' in patch) {
+            props.TORSO_LENGTH = props.LOWER_TORSO + props.UPPER_TORSO;
+        }
+        // Per-joint localOffset update — přiřazujeme nový objekt (Joint constructor
+        // dělá shallow copy, ale my potřebujeme i mutaci za běhu reflektovanou v meshi)
+        const J = this.joints;
+        J.torso.localOffset     = { x: 0, y: props.LOWER_TORSO, z: 0 };
+        J.neck.localOffset      = { x: 0, y: props.UPPER_TORSO, z: 0 };
+        J.headTop.localOffset   = { x: 0, y: props.HEAD_RADIUS * 2, z: 0 };
+        J.shoulderL.localOffset = { x: -props.SHOULDER_X, y: props.UPPER_TORSO, z: 0 };
+        J.shoulderR.localOffset = { x: +props.SHOULDER_X, y: props.UPPER_TORSO, z: 0 };
+        J.elbowL.localOffset    = { x: 0, y: -props.UPPER_ARM, z: 0 };
+        J.elbowR.localOffset    = { x: 0, y: -props.UPPER_ARM, z: 0 };
+        J.wristL.localOffset    = { x: 0, y: -props.FOREARM, z: 0 };
+        J.wristR.localOffset    = { x: 0, y: -props.FOREARM, z: 0 };
+        J.hipL.localOffset      = { x: -props.HIP_X, y: 0, z: 0 };
+        J.hipR.localOffset      = { x: +props.HIP_X, y: 0, z: 0 };
+        J.kneeL.localOffset     = { x: 0, y: -props.THIGH, z: 0 };
+        J.kneeR.localOffset     = { x: 0, y: -props.THIGH, z: 0 };
+        J.ankleL.localOffset    = { x: 0, y: -props.SHIN, z: 0 };
+        J.ankleR.localOffset    = { x: 0, y: -props.SHIN, z: 0 };
     }
 
     getJoint(name) {
