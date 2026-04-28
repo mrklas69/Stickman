@@ -4,6 +4,8 @@ A layered 3D human figure with animation, center of mass, support polygon, and i
 
 ![Stickman walking](assets/hero-walk.gif)
 
+**Live demo:** <https://mrklas69.github.io/Stickman/>
+
 The project is a learning playground: each concept (forward kinematics, IK, balance, gait, swimming, climbing) is isolated in its own demo so it can be inspected and tweaked in isolation.
 
 ## Quick start
