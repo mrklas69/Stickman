@@ -55,10 +55,10 @@ function buildProportions(H) {
         SHOULDER_X:    0.075  * H,
         // HIP_X mírně > R.pelvis → pánevní klouby vyčnívají z pasu (vidět)
         HIP_X:         0.050  * H,
-        UPPER_ARM:     0.180  * H,  // rameno → loket (kratší biceps)
-        FOREARM:       0.215  * H,  // loket → zápěstí (delší předloktí — pro ohnutý loket dlaň doráží k hlavě/krku)
-        THIGH:         0.245  * H,  // kyčel → koleno
-        SHIN:          0.245  * H,  // koleno → kotník
+        UPPER_ARM:     0.171  * H,  // rameno → loket (kratší biceps; po refresh 2026-04-29: ×0.95)
+        FOREARM:       0.204  * H,  // loket → zápěstí (po refresh 2026-04-29: ×0.95 — kratší paže)
+        THIGH:         0.257  * H,  // kyčel → koleno (po refresh 2026-04-29: ×1.05 — delší noha)
+        SHIN:          0.257  * H,  // koleno → kotník (po refresh 2026-04-29: ×1.05)
 
         // === TLOUŠŤKY KOSTÍ — per-joint poloměry ===
         // Kost mezi parent a child se vykreslí jako komolý kužel (radiusBottom=parent, radiusTop=child),

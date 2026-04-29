@@ -72,7 +72,7 @@ Stav kostry, kdy všechny `joint.angles` jsou 0: postava stojí svisle, ruce vis
 
 Funkce `buildProportions(H)` v `Skeleton.js` vrací všechny délky kostí, poloměry kloubů a hmotnosti relativně k výšce postavy `H`. Inspirace Vitruviem (≈ 8 hlav). Změna proporcí = jediný zdroj pravdy: editovat `buildProportions`, neměnit číslo na dvou místech.
 
-**Live ladění** (od Sezení 6): `Skeleton.setProportions(patch)` aktualizuje proporce + per-joint `localOffset`. View pak musí zavolat `view.rebuildBones()` (kosti mají fixní délku v `CylinderGeometry`, musí se přebudovat). Inspector demo má sekci "Proporce (× default)" s 6 slidery (lumbar, hrudník, biceps, předloktí, stehno, lýtko) jako multiplier 0.5×–1.5×.
+Po Sezení 6 byla v Inspectoru sekce „Proporce" s 6 multiplier slidery pro live ladění (přes `Skeleton.setProportions` + `StickmanView.rebuildBones`). V Sezení 7 jsme našli sweet spot a zafixovali do default (biceps × 0.95, předloktí × 0.95, stehno × 1.05, lýtko × 1.05); slidery i komentáře v Inspectoru byly odstraněny. API `setProportions` / `rebuildBones` zůstává pro případnou budoucí potřebu.
 
 ---
 
@@ -84,7 +84,7 @@ Stupeň volnosti — počet **nezávislých rotačních os** kloubu. Termín z m
 
 - Koleno: 1 DOF (jen ohyb)
 - Kotník: 0 DOF v naší kostře (zjednodušení — kotník je koncový bod, žádné dorzi/plantární flexe)
-- Rameno: 2 DOF v naší kostře (předpažení + abdukce; reálné rameno má 3, my vynecháváme axiální rotaci paže)
+- Rameno: 3 DOF v naší kostře (předpažení/zapažení x, axiální rotace y, abdukce do strany z)
 - Trup (torso): 3 DOF (flexe, twist, lateral)
 
 V kódu: `joint.dof` = počet, `joint.axes` = pole aktivních os (`['x']`, `['x','z']`, `['x','y','z']`).

@@ -46,3 +46,54 @@ Aktuálně user vyrobí pose v Inspectoru přes slidery → Copy JSON → AI / m
 ### Status
 
 Rozumné rozšíření. Posunout do TODO až bude pose library větší (= user chce vlastní organizaci).
+
+## Drift — procedural idle motion (budget-based random walk) *(Sezení 7)*
+
+**Kandidát na F2 STAND-idle animace.** Postava ve stoji se neustále mírně hýbe k náhodným cílům — herní standard pro „postava-žije". Liší se od Inspector Random tlačítka tím, že nesází na celý DOF range najednou (Inspector full random + quint ease-out už zachytí 60 % efektu).
+
+### Algoritmus (3 fáze)
+
+1. **Generuj cílovou pózu.** Plně uniform random v limitech každé osy (jak to dělá `applyRandom` v Inspectoru). Volitelně: target = nějaký „referenční idle pose" + random offset.
+2. **Distribuuj budget.**
+   - Sestav vektor všech `N` aktivních os (19 DOF + 3 rootRot = 22; rootPos vynechat — snap se postará).
+   - Normalizuj rozsah každé osy na 100 bodů: `pool = N × 100 = 2200 bodů`.
+   - `budget = FRACTION × pool` (parametr, default `FRACTION = 0.25` → 550 bodů).
+   - Iteruj: `pick random axis i` → `consume = min(STEP, |delta_i|, budget)` → posuň `intermediate[i]` o `consume × sign(delta_i)` směrem k targetu → `budget -= consume`.
+   - Když `budget <= 0` nebo všechny `delta_i == 0`, stop.
+3. **Animace paralelně.** Spustit `Pose.lerp(current, intermediate)` přes `transitionDuration` (např. 0.8 s) s **expo nebo quint ease-out** (max zrychlení na začátek, velmi pomalý dojezd). Po dokončení znovu fáze 1 → kontinuální drift.
+
+### Parametry
+
+| Parametr | Default | Účel |
+|---|---|---|
+| `FRACTION` | 0.25 | Kolik z totalRange se spotřebuje per cyklus (= „intenzita driftu") |
+| `STEP` | 5 bodů | Granulárnost rozdělování budget mezi osami |
+| `transitionDuration` | 0.8 s | Doba paralelní animace |
+| `easing` | quint nebo expo | Tvar dojezdu |
+| `targetRefreshOnArrive` | true | Po dokončení transition vyber nový target |
+| `rootRotationFraction` | 0.10 | Volitelně: rootRotation s vlastním nižším podílem (lever celého modelu) |
+
+### Edge cases
+
+- **Limity per osa** — algoritmus interpoluje mezi current (v limits) a target (v limits), tedy intermediate je vždy v limits. Safe.
+- **Delta = 0 na vybrané ose** — skip a pick znovu. Pokud `aktivní_osy = 0` (postava už v targetu), break loop.
+- **rootRotation s rangem 360°** — pokud do budget zahrne, bude pootočení dramatické. Buď vyloučit z poolu, nebo dát vlastní `rootRotationFraction`.
+- **Target může být daleko** — `delta_i = 80 bodů`, ale `consume = STEP = 5` → 16 iterací jen na jednu osu. Chování OK, jen jemnější.
+
+### Místo v architektuře
+
+- **Patří do** `src/character/Animations.js` jako nová animace pro `Status.STAND` (idle varianta), nebo jako parametr stávající `animateStand` (= `params.idle = true`).
+- **Nezávislá** na konkrétním demu — Stickman wrapper ji volá jako každou jinou animaci přes `animate(dt)`.
+- Volitelně: druhé tlačítko v Inspectoru "Drift" jako preview F2 idle, ale až po implementaci ve F2.
+
+### Alternativy zvážené (a zamítnuté)
+
+| Varianta | Proč zamítnutá |
+|---|---|
+| **A: Subset (třetina sliderů)** | Jen omezí počet hýbajících se kloubů, neztiší skoky → ne plynulé. |
+| **B: Pure delty (±10 % per osa, bez targetu)** | Brownian noise bez intent — postava „třese se", nevypadá živě. |
+| **D: Drift (budget toward target)** ✅ | Konvergence k targetu = ladný „intent"; budget kontroluje rozsah. Herní standard pro idle. |
+
+### Status
+
+Posunout do TODO ve F2 fázi (RUN / SWIM / JUMP / SLEEP / DANCE — k STAND přidat idle variantu). Inspector zatím má quint easing + full Random (= odlišný účel: diversity check, ne idle).

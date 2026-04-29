@@ -42,40 +42,20 @@
 
     <h2>Dema (ostrý kód)</h2>
     <a href="demos/demo01_inspector.html">
-        <strong>Demo 01 — Inspector</strong>
-        <span>Statický playground postavy. Pose presety (Reset / Random + sekce LEHY a Ostatní), slidery všech 18 DOF + root pos/rot s tooltipy a dvojklik-resetem, debug overlay (CoM, support polygon, gravity arrow, nos+anáhata markery, hover tooltipy nad klouby/kostmi), plynulé přechody mezi pózami, Copy JSON. Snap-to-floor a podlaha jsou vždy ON.</span>
+        <strong>Demo 01 — Inspector (statické pózy)</strong>
+        <span>Hlavní playground postavy. 20 propracovaných póz ve 3 sekcích (POSTOJE, SEDY/KLEKY, LEHY) + Reset/Random; slidery všech 19 DOF a root pos/rot s tooltipy a dvojklik-resetem; debug overlay (CoM, gravity arrow, body markery — nos a anáhata) + hover tooltipy nad klouby a kostmi; plynulé přechody mezi pózami (cubic ease-out 0.6 s); Copy JSON. Snap-to-floor a podlaha jsou vždy ON.</span>
     </a>
     <a href="demos/demo02_stresstest.html">
         <strong>Demo 02 — Stress test (prototyp F2)</strong>
         <span>První dynamické demo nad nově zavedenou vrstvou <code>src/character/</code> — Stickman wrapper se status atributem a animate(dt). Prototyp implementuje 2 stavy: STAND a WALK (s plnými parametry chůze: tempo, rozkrok, zdvih kolena, twist, vrávorání, swing rukou). F2 fáze postupně přidá SIT, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE.</span>
     </a>
-    <a href="demos/demo01_static.html">
-        <strong>Demo 01 — Statická rest pose</strong>
-        <span>Postava v anatomické nule. Ověření že model + view fungují.</span>
-    </a>
-    <a href="demos/demo02_poses.html">
-        <strong>Demo 02 — Pose presety</strong>
-        <span>Tlačítka pro Stand / T-pose / Sit / Wave / Squat. Ověří lokty a kolena.</span>
-    </a>
-    <a href="demos/demo03_playground.html">
-        <strong>Demo 03 — DOF playground</strong>
-        <span>Vlevo postava, vpravo posuvníky pro výšku H, root transformaci a všech 14 DOF.</span>
-    </a>
     <a href="demos/demo04_animation.html">
         <strong>Demo 04 — Procedurální animace</strong>
         <span>Sin/cos cykly v reálném čase: idle, dýchání, mávání, tanec, dřepy.</span>
     </a>
-    <a href="demos/demo05_com.html">
-        <strong>Demo 05 — Center of Mass</strong>
-        <span>Vážené těžiště kostí + jeho horizontální projekce na podlahu.</span>
-    </a>
     <a href="demos/demo06_stability.html">
         <strong>Demo 06 — Body opory &amp; stabilita</strong>
         <span>Podpůrný polygon, indikátor stability (zelený = stabilní, červený = padá).</span>
-    </a>
-    <a href="demos/demo07_snap.html">
-        <strong>Demo 07 — Snap k podlaze</strong>
-        <span>Snap on/off: postava se drží podlahy bez ohledu na pózu (squat klesá, lunge se přizpůsobí).</span>
     </a>
     <a href="demos/demo08_lerp.html">
         <strong>Demo 08 — Pose interpolace</strong>

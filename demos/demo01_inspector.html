@@ -9,15 +9,12 @@
         body { margin: 0; overflow: hidden; background: #1a1a22;
                font-family: sans-serif; color: #ddd; }
 
-        /* === Layout: viewport uprostřed, panely vlevo, vpravo, dole === */
+        /* === Layout: viewport uprostřed, panely vlevo a vpravo === */
         #app {
             position: relative;
             display: grid;
             grid-template-columns: 200px 1fr 320px;
-            grid-template-rows: 1fr auto;
-            grid-template-areas:
-                "left   viewport right"
-                "bottom bottom   bottom";
+            grid-template-areas: "left viewport right";
             height: 100vh;
             width: 100vw;
         }
@@ -29,10 +26,6 @@
                         overflow-y: auto; padding: 14px 12px; box-sizing: border-box; }
         #panel-right  { grid-area: right;  background: #22222b; border-left: 1px solid #444;
                         overflow-y: auto; padding: 14px 14px; box-sizing: border-box; }
-        #panel-bottom { grid-area: bottom; background: #22222b; border-top: 1px solid #444;
-                        padding: 10px 16px; box-sizing: border-box;
-                        display: flex; align-items: center; justify-content: center;
-                        gap: 24px; flex-wrap: wrap; }
 
         /* Hlavička v rohu viewportu */
         #info { position: absolute; top: 10px; left: 10px;
@@ -102,27 +95,6 @@
         }
         button.mini:hover { background: #3a3a45; border-color: #ffaa66; }
         button.mini.flash { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
-
-        /* === Panel-bottom: Debug toggles + root === */
-        .toggle {
-            display: flex; align-items: center; gap: 6px;
-            padding: 6px 10px; background: #2a2a35; border: 1px solid #3a3a45;
-            border-radius: 4px; cursor: pointer; user-select: none; font-size: 0.85em;
-        }
-        .toggle:hover    { background: #3a3a45; }
-        .toggle.on       { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
-        .toggle .led     { width: 9px; height: 9px; border-radius: 50%;
-                           background: #555; border: 1px solid #777; }
-        .toggle.on .led  { background: #1a1a22; border-color: #1a1a22; }
-        #panel-bottom .b-group {
-            display: flex; align-items: center; gap: 8px;
-            border-right: 1px solid #444; padding-right: 18px;
-        }
-        #panel-bottom .b-group:last-child { border-right: 0; padding-right: 0; }
-        #panel-bottom label { font-size: 0.85em; color: #ccc; }
-        #panel-bottom input[type=range] { width: 140px; accent-color: #ffaa66; }
-        #panel-bottom .value { font-family: monospace; color: #88ccff;
-                               width: 36px; text-align: right; font-size: 0.85em; }
     </style>
     <script type="importmap">
     { "imports": {
@@ -143,7 +115,7 @@
     <div id="viewport">
         <div id="info">
             <h2>Demo 01 — Inspector</h2>
-            <p>Vyber pózu vlevo. Pohni myší nad postavu pro tooltip. Slidery vpravo, debug dole.</p>
+            <p>Vyber pózu vlevo, slidery vpravo. Pohni myší nad postavu pro tooltip. CoM, gravity i body markery jsou vždy ON.</p>
         </div>
     </div>
 
@@ -153,11 +125,6 @@
         <div id="sliders-container"></div>
     </div>
 
-    <!-- Spodní panel: debug toggles (centrované).
-         Snap to floor a podlaha jsou vždy ON. -->
-    <div id="panel-bottom">
-        <div class="b-group" id="debug-toggles"></div>
-    </div>
 </div>
 
 <script type="module">
@@ -363,63 +330,6 @@
     { const g = addGroup('Levá noha');  addJointSliders(g, 'hipL'); addJointSliders(g, 'kneeL'); }
     { const g = addGroup('Pravá noha'); addJointSliders(g, 'hipR'); addJointSliders(g, 'kneeR'); }
 
-    // === Proporce — slidery jako multiplier (0.5×—1.5× default) ============
-    // Default hodnoty z buildProportions (před multiplier × H).
-    const PROP_DEFAULTS = {
-        LOWER_TORSO: 0.16,
-        UPPER_TORSO: 0.16,
-        UPPER_ARM:   0.180,
-        FOREARM:     0.215,
-        THIGH:       0.245,
-        SHIN:        0.245,
-    };
-    const PROP_LABELS = {
-        LOWER_TORSO: 'lumbar',
-        UPPER_TORSO: 'hrudník',
-        UPPER_ARM:   'biceps',
-        FOREARM:     'předloktí',
-        THIGH:       'stehno',
-        SHIN:        'lýtko',
-    };
-    // Při změně proporce: aktualizuj skeleton, přebuduj kosti, snap, render.
-    function applyPropsMultiplier(key, mult) {
-        const newValue = PROP_DEFAULTS[key] * mult * H;
-        skel.setProportions({ [key]: newValue });
-        view.rebuildBones();
-        skel.snapToFloor(FLOOR_Y);
-        if (rootPosYSlider) rootPosYSlider.refresh();
-        view.update();
-    }
-    {
-        const g = addGroup('Proporce (× default)');
-        for (const key of Object.keys(PROP_DEFAULTS)) {
-            // Slider je multiplier 0.5—1.5. Step 0.01 = drobné ladění.
-            // V allSliders ho neevidujeme — refresh sliderů po pose.apply by jinak
-            // pose neumí ovlivnit (proporce nejsou součást pose).
-            const row = document.createElement('div');
-            row.className = 'row';
-            row.innerHTML = `
-                <label>${PROP_LABELS[key]}</label>
-                <input type="range" min="0.5" max="1.5" step="0.01" value="1.00">
-                <span class="value">1.00</span>
-            `;
-            const input = row.querySelector('input');
-            const valueEl = row.querySelector('.value');
-            input.addEventListener('input', () => {
-                const v = parseFloat(input.value);
-                valueEl.textContent = v.toFixed(2);
-                applyPropsMultiplier(key, v);
-            });
-            // Dvojklik = reset na 1.00
-            input.addEventListener('dblclick', () => {
-                input.value = 1.00;
-                valueEl.textContent = '1.00';
-                applyPropsMultiplier(key, 1.00);
-            });
-            g.appendChild(row);
-        }
-    }
-
     // === Copy JSON button (dočasně) ============================================
     // Vyrobí JSON snapshot aktuální pózy ve formátu kompatibilním s makePose():
     //   { angles: { jointName: { x?, y?, z? }, ... }, rootPosition?, rootRotation? }
@@ -481,19 +391,11 @@
     // =========================================================================
     // 4. Levý panel — pose presety
     // =========================================================================
-    // Filter: vlastní Pose instance z modulu (sady jako BASIC_POSES jsou plain
-    // objekty, makePose je funkce — odfiltruje je test 'angles' in val).
-    const poseList = Object.entries(Poses)
-        .filter(([key, val]) => val && typeof val === 'object'
-                                     && 'angles' in val
-                                     && 'rootRotation' in val)
-        .map(([key, pose]) => ({ key, pose }));
-
     const posesContainer = document.getElementById('poses-list');
     const poseButtons = {};
 
     // === Pose transitions =====================================================
-    // Plynulý přechod mezi current pose a target přes Pose.lerp + cubic ease-out
+    // Plynulý přechod mezi current pose a target přes Pose.lerp + quint ease-out
     // (= "rozletí a brzdí"). transition stav drží render loop, který ho každý
     // frame interpoluje. Když je null, nic se neděje.
     let transition = null;
@@ -509,9 +411,11 @@
     }
 
     /**
-     * Random pose — všechny DOF náhodně v rámci limitů + náhodná rootRotation
-     * v plném rozsahu sliderů [-180, 180]° na všech třech osách. rootPosition
-     * neměníme (snap-to-floor stejně přepočítá Y, X/Z = 0 je default).
+     * Random pose — full uniform random na všech 19 DOF + 3 root rotation
+     * (žádný subset, žádný budget). Účel Inspectoru = diversity check, vidět
+     * krajní kombinace. Plynulejší pohyb pro idle animace = budget-based Drift,
+     * implementovaný v F2 (viz IDEAS.md). Ease-out quint zvýrazní "swing"
+     * z full-body pohybu.
      */
     function applyRandom() {
         const target = new Pose('random');
@@ -570,69 +474,38 @@
     // 2. Sekce "POSTOJE"    — pózy z STANCE_POSES
     // 3. Sekce "SEDY/KLEKY" — pózy z SIT_POSES v jejich export pořadí
     // 4. Sekce "LEHY"       — pózy z LIE_POSES
-    // 5. Sekce "Ostatní"    — zbytek (= ne-postoj, ne-sed, ne-leh)
+    // Pose mimo tyto 3 sady (např. kapalasana/pincha v HEAD_SUPPORT_POSES,
+    // primitivní stand/tpose/wave/squat) se v Inspectoru nezobrazují — jsou
+    // dostupné svým vlastním demem (demo14_headsupport, demo08_lerp, …).
     addPoseButton('reset', 'Reset (rest)', applyReset);
     addPoseButton('random', 'Random', applyRandom);
 
-    // Sekce POSTOJE — pózy z Poses.STANCE_POSES (= stand, tpose, wave, squat)
-    const stanceKeys = Object.keys(Poses.STANCE_POSES);
+    // Sekce POSTOJE — pózy z Poses.STANCE_POSES (authored postoje)
     addPoseSection('POSTOJE');
-    for (const key of stanceKeys) {
+    for (const key of Object.keys(Poses.STANCE_POSES)) {
         const pose = Poses.STANCE_POSES[key];
         addPoseButton(key, pose.name, () => applyPose(key, pose));
     }
 
-    // Sekce SEDY/KLEKY — pózy z Poses.SIT_POSES (= sitCross, sitKneel, cat, …)
-    const sitKeys = Object.keys(Poses.SIT_POSES);
+    // Sekce SEDY/KLEKY — pózy z Poses.SIT_POSES
     addPoseSection('SEDY/KLEKY');
-    for (const key of sitKeys) {
+    for (const key of Object.keys(Poses.SIT_POSES)) {
         const pose = Poses.SIT_POSES[key];
         addPoseButton(key, pose.name, () => applyPose(key, pose));
     }
 
-    // Sekce LEHY — pózy z Poses.LIE_POSES (= layBack, layStarfish, …)
-    const lieKeys = Object.keys(Poses.LIE_POSES);
+    // Sekce LEHY — pózy z Poses.LIE_POSES
     addPoseSection('LEHY');
-    for (const key of lieKeys) {
+    for (const key of Object.keys(Poses.LIE_POSES)) {
         const pose = Poses.LIE_POSES[key];
         addPoseButton(key, pose.name, () => applyPose(key, pose));
     }
 
-    // Sekce Ostatní — všechno z library mimo POSTOJE, SEDY/KLEKY a LEHY
-    addPoseSection('Ostatní');
-    for (const { key, pose } of poseList) {
-        if (stanceKeys.includes(key) || sitKeys.includes(key) || lieKeys.includes(key)) continue;
-        addPoseButton(key, pose.name, () => applyPose(key, pose));
-    }
-
     // =========================================================================
-    // 5. Spodní panel — debug toggles + Root Y + Snap
+    // 5. Init — snap-to-floor a podlaha jsou vždy ON, debug vrstvy CoM, gravity
+    // a body markery taky vždy ON (žádné UI toggles, KISS). Root.y slider je
+    // disabled (= read-only zobrazení aktuální hodnoty po snapu).
     // =========================================================================
-    const togglesContainer = document.getElementById('debug-toggles');
-
-    // Toggles. CoM a Gravity sdílejí jedno tlačítko (gravita je kreslená z CoM
-    // dolů, logicky patří k CoM vizualizaci). Tooltip běží vždy ON, žádný button.
-    const toggleDefs = [
-        { key: 'com',     label: 'CoM',     defaultOn: true },
-        { key: 'body',    label: 'Body markery', defaultOn: true },
-    ];
-    for (const def of toggleDefs) {
-        const el = document.createElement('div');
-        el.className = 'toggle' + (def.defaultOn ? ' on' : '');
-        el.innerHTML = `<div class="led"></div><span>${def.label}</span>`;
-        el.addEventListener('click', () => {
-            const newState = !el.classList.contains('on');
-            el.classList.toggle('on', newState);
-            debug.setVisible(def.key, newState);
-            // CoM toggle ovládá i gravity vrstvu (sdílený UI control)
-            if (def.key === 'com') debug.setVisible('gravity', newState);
-        });
-        togglesContainer.appendChild(el);
-    }
-
-    // Snap je vždy ON: root.y slider je trvale disabled (= read-only zobrazení
-    // aktuální hodnoty po snapu). Při startu jednou zavoláme snap, ať root.y
-    // odpovídá rest pose realitě, a slider zreflektuje tu hodnotu.
     if (rootPosYSlider) {
         rootPosYSlider.input.disabled = true;
         rootPosYSlider.input.style.opacity = '0.4';
@@ -645,16 +518,18 @@
     // 6. Render loop — pose transition tick + view/debug update
     // =========================================================================
     scene.onUpdate((dt) => {
-        // Transition krok: interpoluj 'from' a 'to' s cubic ease-out
-        // (= startuje rychle, dobržďuje na konci → "rozletí" a doráží)
+        // Transition krok: interpoluj 'from' a 'to' s quint ease-out
+        // (= max zrychlení na začátek, velmi pomalý dojezd → dramatičtější
+        // "swing" pocit než cubic; výraznější u Random pohybů přes celé tělo)
         if (transition) {
             transition.t += dt / TRANSITION_DURATION;
             if (transition.t >= 1) {
                 transition.to.apply(skel);            // finální stav = přesně cílová póza
                 transition = null;
             } else {
-                // ease-out cubic: f(t) = 1 - (1-t)³
-                const eased = 1 - Math.pow(1 - transition.t, 3);
+                // ease-out quint: f(t) = 1 - (1-t)⁵
+                const u = 1 - transition.t;
+                const eased = 1 - u * u * u * u * u;
                 const lerped = Pose.lerp(transition.from, transition.to, eased);
                 lerped.apply(skel);
             }

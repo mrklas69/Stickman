@@ -102,6 +102,221 @@ export const squat = makePose('Squat', {
     neck: { x: 25 },
 });
 
+/**
+ * Klanění (bow / kowtow / sa-kei-rei) — postava má pelvis silně překlopen
+ * dopředu (rootRotation.x = -136°), nohy téměř rovně dozadu (knee 6°), pelvis
+ * přitažen ke kolenním kloubům (hip.x = 140°), trup ještě dál v předklonu
+ * (torso.x = 30°), paže vpřed v ohnutém lokti (klanějící gesto).
+ *
+ *   - rootRotation.x = -136° → kostra silně překlopená vpřed (vrch postavy
+ *     míří k -Z + dolů, paty nahoru a vzad)
+ *   - torso.x = 30 → další předklon trupu
+ *   - neck.x = 18 → mírná flexe hlavy (čelo k podlaze)
+ *   - hip.x = 140 → max flexe (stehna těsně k trupu po překlopení)
+ *   - hip.z = 3 → drobná abdukce (kolena lehce ven)
+ *   - knee.x = 6 → téměř rovné nohy (lýtka v prodloužení stehen)
+ *   - shoulder.x = 73 → předpažení (paže před tělem po rotaci kostry = vpřed
+ *     a dolů k zemi)
+ *   - shoulder.y = -73 → silná vnitřní rotace (palec dolů, dlaně k zemi)
+ *   - shoulder.z = 19 → drobná abdukce (paže lehce ven od trupu)
+ *   - elbow.x = 82 → ohnutý loket (= dlaně před hlavou, ne plně natažené)
+ *
+ * Body opory: dlaně + čelo + špičky chodidel (= "kowtow tripod").
+ *
+ * Asymetrie z manual fittingu byla sjednocena na průměry — později plánujeme
+ * automatické kývání/šum pro přirozenou asymetrii.
+ */
+export const bow = makePose('Klanění', {
+    torso:     { x: 30 },
+    neck:      { x: 18 },
+    shoulderL: { x: 73, y: -73, z: 19 },
+    shoulderR: { x: 73, y: -73, z: 19 },
+    elbowL:    { x: 82 },
+    elbowR:    { x: 82 },
+    hipL:      { x: 140, z: 3 },
+    hipR:      { x: 140, z: 3 },
+    kneeL:     { x: 6 },
+    kneeR:     { x: 6 },
+});
+bow.rootRotation = { x: -136, y: 0, z: 0 };
+
+/**
+ * Arabeska (balet, 2. poloha) — stoj na levé noze, pravá natažená vzad,
+ * trup horizontálně dopředu, paže rozpažené v kontrapozici (levá lehce
+ * vpřed, pravá lehce vzad — typický baletní detail).
+ *
+ *   - rootRotation.x = -83 → kostra téměř horizontálně dopředu (vrch těla
+ *     míří k -Z)
+ *   - torso.x = -11 → mírný záklon trupu (= držení vznešené linie)
+ *   - neck.x = -19 → záklon hlavy (kouká kupředu po horizontalizaci)
+ *   - shoulderL.x = 5, shoulderR.x = -5 → asymetrie záměrná: levá paže
+ *     drobně vpřed, pravá vzad (= "ladná linie" arabesque)
+ *   - shoulder.y = 10 → drobná vnější rotace (palce vzhůru)
+ *   - shoulder.z = 100 → abdukce do stran (ramena odtažená od trupu)
+ *   - hipR.x = 90 → pravá noha vodorovně (po -83° rotaci kostry = noha
+ *     natažená vzad rovně)
+ *   - kneeR.x = 9 → noha skoro rovná (= klasická arabesque linie)
+ *   - levá noha = bez úhlů (stojná, kolmá k podlaze po rotaci)
+ *
+ * Body opory: kotník levé nohy.
+ *
+ * Asymetrie y/z ramen sjednocena na průměry; X (5° vs -5°) ponechána —
+ * je to esence pose.
+ */
+export const arabesque = makePose('Arabeska', {
+    torso:     { x: -11 },
+    neck:      { x: -19 },
+    shoulderL: { x: 5, y: 10, z: 100 },
+    shoulderR: { x: -5, y: 10, z: 100 },
+    hipR:      { x: 90 },
+    kneeR:     { x: 9 },
+});
+arabesque.rootRotation = { x: -83, y: 0, z: 0 };
+
+/**
+ * Protažení (lateral stretch) — stoj s úklonem trupu do strany, levá paže
+ * natažená vzhůru (s pokrčeným loktem nad hlavou), pravá zapažená a silně
+ * pokrčená v lokti (= ruka za zády / na bok). Asymetrie je celá podstata
+ * pose, sjednocují se jen y rotace ramen (= manual fitting noise).
+ *
+ *   - rootRotation.z = -19 → mírný úklon celé kostry do strany
+ *   - torso.z = -30 → max úklon trupu (= součet kostra+trup ≈ -49°)
+ *   - torso.x = 2 → drobný předklon
+ *   - neck.x = 15, y = -4, z = -29 → hlava následuje úklon, lehký twist
+ *   - shoulderL.x = 56, z = 99 → levá paže vzhůru (předpažení + abdukce)
+ *   - elbowL.x = 72 → loket pokrčený (= dlaň nad hlavou)
+ *   - shoulderR.x = -69, z = 60 → pravá paže zapažená + abdukce dolů
+ *   - elbowR.x = 111 → silně ohnutý loket (= ruka za zády / na bok)
+ *   - shoulder.y = -24 → vnitřní rotace obou paží
+ *   - hipR.z = 44 → pravá noha mírně ven (rozšíření opory)
+ *   - hipL.z = -10 → levá noha lehce dovnitř (kompenzace úklonu)
+ *   - knee.x = 16 → obě kolena drobně pokrčená (uvolněný stoj)
+ *
+ * Body opory: oba kotníky (asymetrické rozkročení).
+ */
+export const stretch = makePose('Protažení', {
+    torso:     { x: 2, z: -30 },
+    neck:      { x: 15, y: -4, z: -29 },
+    shoulderL: { x: 56, y: -24, z: 99 },
+    elbowL:    { x: 72 },
+    shoulderR: { x: -69, y: -24, z: 60 },
+    elbowR:    { x: 111 },
+    hipL:      { z: -10 },
+    kneeL:     { x: 16 },
+    hipR:      { z: 44 },
+    kneeR:     { x: 16 },
+});
+stretch.rootRotation = { x: 0, y: 0, z: -19 };
+
+/**
+ * Stoj na hlavě (sirsasana, supported headstand) — postava vzhůru nohama,
+ * hlava na zemi, paže ohnuté v lokti pro podporu hlavy. Liší se od
+ * `kapalasana` (stand-on-head s rovnýma rukama do strany jako tripod):
+ * tady jsou paže vepředu s lokty u hlavy, "supportive" varianta.
+ *
+ *   - rootRotation.x = -180 → kostra úplně otočená (= +180, ekvivalentní)
+ *   - torso.x = -7 → mírný záklon trupu (drobné srovnání linie)
+ *   - neck.x = 12 → mírná flexe hlavy (= temeno k zemi)
+ *   - shoulder.x = 56 → předpažení (po -180 rotaci = paže dolů k podlaze
+ *     vepředu před hlavou)
+ *   - shoulder.z = 26 → drobná abdukce (lokty ven)
+ *   - elbow.x = 98 → silně ohnutý loket (= dlaně u uší / spánků)
+ *   - knee.x = 13 → drobně pokrčená kolena (uvolněná noha vzhůru)
+ *   - hipy = 0 (rest) → stehna přímo nahoru (= pelvis nad rameny, klasická
+ *     vertikální linie sirsasany)
+ *
+ * Body opory: temeno hlavy + obě dlaně (= "tripod" stejně jako kapalasana,
+ * ale s ohnutými lokty).
+ *
+ * Asymetrie shoulder.y (-3 vs 0) sjednocena na 0; z (27 vs 25) na 26;
+ * elbow (98 vs 97) na 98; kneeL (11) vs kneeR (15) na 13.
+ */
+export const headstand = makePose('Stoj na hlavě', {
+    torso:     { x: -7 },
+    neck:      { x: 12 },
+    shoulderL: { x: 56, z: 26 },
+    shoulderR: { x: 56, z: 26 },
+    elbowL:    { x: 98 },
+    elbowR:    { x: 98 },
+    kneeL:     { x: 13 },
+    kneeR:     { x: 13 },
+});
+headstand.rootRotation = { x: -180, y: 0, z: 0 };
+
+/**
+ * Most (chakrasana / wheel pose) — záklonový oblouk: postava na zemi v
+ * inverzním "U", pelvis nadzvednutý, dlaně a chodidla na podlaze, hlava
+ * mezi pažemi. Klasická jógová asana.
+ *
+ *   - rootRotation.x = 83 → kostra téměř horizontálně (= leh na zádech
+ *     s pelvisem zvednutým)
+ *   - torso.x = -30 → max záklon trupu (lumbar extension)
+ *   - neck.x = -30 → záklon hlavy (mezi pažemi)
+ *   - shoulder.x = 110 → přepažení (po horizontalizaci kostry = paže
+ *     směrem dolů k podlaze za hlavou)
+ *   - shoulder.y = -59 → silná vnitřní rotace (= dlaně ven, "obrácené"
+ *     prsty směrem k pelvisu)
+ *   - shoulder.z = 115 → nad-abdukce (paže ven do širšího záběru)
+ *   - elbow.x = 17 → téměř rovné lokty (= dlaně dosáhnou na podlahu)
+ *   - hip.x = -30 → záklon pelvisu (= zvednutí pánve nad zem)
+ *   - hip.z = 12 → drobná abdukce (kolena ven od osy)
+ *   - knee.x = 69 → silně pokrčená kolena (= chodidla u pánve)
+ *
+ * Body opory: dlaně + chodidla (4 body, asymetrický oblouk).
+ *
+ * Asymetrie: shoulder.y (-63 vs -55) → -59; z (115 vs 114) → 115;
+ * elbow (15 vs 19) → 17; hip.z (10 vs 13) → 12; knee (70 vs 68) → 69.
+ */
+export const bridge = makePose('Most', {
+    torso:     { x: -30 },
+    neck:      { x: -30 },
+    shoulderL: { x: 110, y: -59, z: 115 },
+    shoulderR: { x: 110, y: -59, z: 115 },
+    elbowL:    { x: 17 },
+    elbowR:    { x: 17 },
+    hipL:      { x: -30, z: 12 },
+    hipR:      { x: -30, z: 12 },
+    kneeL:     { x: 69 },
+    kneeR:     { x: 69 },
+});
+bridge.rootRotation = { x: 83, y: 0, z: 0 };
+
+/**
+ * Vrána (bakasana / crow pose) — balanc na rukou: postava na čtyřech, kolena
+ * opřená o triceps, chodidla za zády ve vzduchu. Jeden z prvních arm-balance
+ * silových postojů v józe.
+ *
+ *   - rootRotation.x = -113 → kostra silně překlopena vpřed (vrch těla míří
+ *     k -Z + dolů, hlava před koleny)
+ *   - torso.x = 30 → další předklon trupu
+ *   - neck.x = 31 → flexe hlavy (kouká vpřed po překlopení)
+ *   - shoulder.x = 90 → předpažení (po překlopení = paže směrem dolů k zemi)
+ *   - shoulder.z = 10 → drobná abdukce (lokty trochu ven)
+ *   - elbow.x = 54 → středně ohnutý (= postoj na předloktích / dlaních)
+ *   - hip.x = 140 → max flexe (kolena přitažená k hrudi)
+ *   - hip.z = 21 → mírná abdukce (kolena ven od osy ke trojúhelníku ramen)
+ *   - knee.x = 130 → max ohyb (= chodidla za zády vzhůru)
+ *
+ * Body opory: dlaně (= "ruční balanc"). Velmi labilní pose.
+ *
+ * Asymetrie: shoulder.x (92 vs 89) → 90; shoulder.z (14 vs 5) → 10
+ * (rozdíl 9 = na hraně, ale obě paže mají být symetrické); elbow → 54;
+ * hip.z (23 vs 18) → 21; knee (130 vs 131) → 130.
+ */
+export const crow = makePose('Vrána', {
+    torso:     { x: 30 },
+    neck:      { x: 31 },
+    shoulderL: { x: 90, z: 10 },
+    shoulderR: { x: 90, z: 10 },
+    elbowL:    { x: 54 },
+    elbowR:    { x: 54 },
+    hipL:      { x: 140, z: 21 },
+    hipR:      { x: 140, z: 21 },
+    kneeL:     { x: 130 },
+    kneeR:     { x: 130 },
+});
+crow.rootRotation = { x: -113, y: 0, z: 0 };
+
 /** Mávání pravou rukou — paže nad hlavu, loket ohnutý. */
 export const wave = makePose('Wave', {
     shoulderR: { x: 0, z: 160 },
@@ -530,12 +745,20 @@ export const BALANCE_POSES = { stand, tpose, wave, leanForward, oneLegL, oneLegR
 /** Pózy s hlavou jako součástí opory (vzhůru nohama). */
 export const HEAD_SUPPORT_POSES = { kapalasana, pincha };
 
-/** Postoje (= stojící pozice). Pořadí odpovídá UI sekci POSTOJE. */
+/**
+ * Postoje — propracované authored pose. Sekce POSTOJE drží jen finální
+ * authored pose. Primitivní (stand, tpose, wave, squat) zůstávají exportované
+ * pro BASIC_POSES, BALANCE_POSES a další dema, ale v Inspectoru se neukáží.
+ *
+ * Pořadí: progressive yoga difficulty — od stoje k inverzi.
+ */
 export const STANCE_POSES = {
-    stand,
-    tpose,
-    wave,
-    squat,
+    arabesque,
+    stretch,
+    bow,
+    crow,
+    bridge,
+    headstand,
 };
 
 /** Sedové / klečové pózy. Pořadí odpovídá UI sekci SEDY/KLEKY. */

@@ -22,15 +22,14 @@ No `npm install`, no bundler, no transpiler. Three.js is loaded via an import ma
 
 ## Demos
 
+The project is consolidating toward 3 final pages (Inspector, Stress test, Aquarium). The legacy single-concept demos (01-static, 02-poses, 03-DOF, 05-CoM, 07-snap) have been folded into the Inspector and removed.
+
 | # | Demo | What it shows |
 |---|------|---------------|
-| 01 | Static | Rest pose. Sanity check that model + view render. |
-| 02 | Poses | Stand / T-pose / Sit / Wave / Squat preset buttons. |
-| 03 | DOF playground | Sliders for height, root transform, and all 14 DOF. |
+| 01 | Inspector | Main static playground. 20 authored poses across 3 sections (POSTOJE / SEDY/KLEKY / LEHY) + Reset/Random; sliders for all 19 DOF + root pos/rot with tooltips and double-click reset; debug overlays (CoM, gravity arrow, body markers, hover tooltips); smooth pose transitions (cubic ease-out); Copy JSON. Snap-to-floor and floor are always on. |
+| 02 | Stress test (F2 prototype) | Dynamic demo over the new `src/character/` layer — `Stickman` wrapper with a `status` attribute and `animate(dt)`. Currently STAND / SIT / WALK / LAY; F2 will add RUN, SWIM, CLIMB, JUMP, SLEEP, DANCE. |
 | 04 | Animation | Procedural sin/cos cycles: idle, breathing, waving, dance, squats. |
-| 05 | CoM | Weighted center of mass + horizontal projection on the floor. |
 | 06 | Stability | Support polygon, stability indicator (green = stable, red = falling). |
-| 07 | Snap | Snap-to-floor on/off; figure tracks the floor regardless of pose. |
 | 08 | Lerp | Smooth pose interpolation (`Pose.lerp` + smoothstep). |
 | 09 | Walk | Leg cycle + counter-swinging arms, support points switch on step. |
 | 10 | IK | 2-bone IK: drag a target, the selected limb follows. |

@@ -6,9 +6,9 @@ Aktivní úkoly. Hotové se přesouvají do `DONE.md`.
 
 Cílový stav: **3 finální stránky** (Inspector statický, Stress test dynamický, Akvárium emergent). Aktuálních 14 dem se postupně sloučí. Plná pádová fyzika je daleko (F4).
 
-### F1 — Inspector (statický) — **HOTOVO** (Sezení 4)
+### F1 — Inspector (statický) — **HOTOVO** (Sezení 4–7)
 
-Sloučí dema 01+02+03+05+07 do jedné stránky. Root **fixní** v prostoru (jen y-slider + snap toggle pro zachování demo07 funkce).
+Sloučí dema 01+02+03+05+07 do jedné stránky. Iterace uzavřena v Sezení 7 (29. 4. 2026): 20 propracovaných pose ve 3 sekcích (POSTOJE 6, SEDY/KLEKY 8, LEHY 6), 19 DOF, slidery proporcí odstraněny po nalezení sweet spotu, sekce „Ostatní" odstraněna z UI.
 
 - [x] **GLOSSARY.md** — založeno (anatomie, kinematika, animace, architektura)
 - [x] **`src/view/DebugView.js`** — vrstvy: CoM, support polygon, gravity arrow, body markery (nos+anáhata), hover tooltip
@@ -24,9 +24,15 @@ Sloučí dema 01+02+03+05+07 do jedné stránky. Root **fixní** v prostoru (jen
   - **DOF rozšíření**: `hipL/R.y` (vnější/vnitřní rotace stehna, [-35, 50]) + `shoulderL/R.y` (axiální rotace paže, [-100, 90]). totalDOF 15 → 19.
   - **Limity rozšířené**: `kneeL/R.x.max` 130 → 165 (pata k zadku pro klek); `hipL/R.z.max` 60 → 80 (lotus, široký turek); `torso.z.max` 20 → 30 (lateral flexe).
   - **Random** přepíná i `rootRotation` (všechny 3 osy ±180°).
-  - **Live slider proporcí** v Inspectoru (`Skeleton.setProportions` + `StickmanView.rebuildBones`): 6 multiplier sliderů (lumbar, hrudník, biceps, předloktí, stehno, lýtko, 0.5×–1.5×).
+  - **Live slider proporcí** v Inspectoru (`Skeleton.setProportions` + `StickmanView.rebuildBones`): 6 multiplier sliderů (lumbar, hrudník, biceps, předloktí, stehno, lýtko, 0.5×–1.5×). *(Sezení 7: slidery odstraněny po nalezení sweet spotu — viz F1.7.)*
   - Favicon fix `<link rel="icon" href="data:,">` (prevence 404).
-- [ ] Smazat `demos/demo01_static.html`, `demo02_poses.html`, `demo03_dof.html`, `demo05_com.html`, `demo07_snap.html` *(až po F2 — některé mohou ještě sloužit jako reference)*
+- [x] **F1.7 Sezení 7 — uzavření iterace 01:**
+  - Refresh proporcí v `buildProportions`: biceps & předloktí × 0.95 (UPPER_ARM 0.180→0.171, FOREARM 0.215→0.204), stehno & lýtko × 1.05 (THIGH/SHIN 0.245→0.257). Lumbar a hrudník beze změny.
+  - 6 nových postojů v `STANCE_POSES`: `bow` (Klanění), `arabesque` (Arabeska), `stretch` (Protažení), `crow` (Vrána), `bridge` (Most), `headstand` (Stoj na hlavě). Pořadí podle yoga progression (stoje → balanc → inverze).
+  - `STANCE_POSES` přepsán: primitivní pose (stand/tpose/wave/squat) odstraněny, zůstávají v BASIC_POSES pro ostatní dema.
+  - Sekce „Ostatní" odstraněna z Inspectoru (kapalasana/pincha mají vlastní demo14).
+  - Slidery „Proporce" odstraněny z Inspectoru.
+- [x] Smazat `demos/demo01_static.html`, `demo02_poses.html`, `demo03_playground.html`, `demo05_com.html`, `demo07_snap.html` *(Sezení 7 — Inspector je plně pokrývá)*
 - [x] Aktualizovat `index.html` rozcestník + popis demo01
 
 ### F2 — Stress test (dynamický unifikovaný)
