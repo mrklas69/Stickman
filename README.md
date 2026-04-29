@@ -27,7 +27,7 @@ The project is consolidating toward 3 final pages (Inspector, Stress test, Aquar
 | # | Demo | What it shows |
 |---|------|---------------|
 | 01 | Inspector | Main static playground. 20 authored poses across 3 sections (POSTOJE / SEDY/KLEKY / LEHY) + Reset/Random; sliders for all 19 DOF + root pos/rot with tooltips and double-click reset; debug overlays (CoM, gravity arrow, body markers, hover tooltips); smooth pose transitions (cubic ease-out); Copy JSON. Snap-to-floor and floor are always on. |
-| 02 | Stress test (F2 prototype) | Dynamic demo over the new `src/character/` layer — `Stickman` wrapper with a `status` attribute and `animate(dt)`. Currently STAND / SIT / WALK / LAY; F2 will add RUN, SWIM, CLIMB, JUMP, SLEEP, DANCE. |
+| 02 | Stress test (F2 prototype) | Dynamic demo over the new `src/character/` layer — `Stickman` wrapper with a `status` attribute and `animate(dt)`. Layout mirrors Inspector: left panel POSES (Reset / Dance / Drift) + STATUS (Walk / Jog / Sprint); right panel global Neklid slider (overlay applied on top of any animation). Drift = budget-based random walk over 19 DOF + 3 root pseudo-axes; Dance = Drift preset in 110 BPM rhythm with constrained root. F2 will add SWIM, CLIMB, JUMP, SLEEP, plus episodic Bio/Fyzio actions over idle. |
 | 04 | Animation | Procedural sin/cos cycles: idle, breathing, waving, dance, squats. |
 | 06 | Stability | Support polygon, stability indicator (green = stable, red = falling). |
 | 08 | Lerp | Smooth pose interpolation (`Pose.lerp` + smoothstep). |
@@ -59,6 +59,8 @@ src/scene/      SCENE — shared environment
 src/util/       UTILITIES — pure functions, no Three.js
   Geometry.js       distXZ, distPointToSegmentXZ, convexHullXZ, pointInConvexPolygonXZ
   DemoUI.js         addSlider, addToggle, addButtonGroup, injectStyles
+  Neklid.js         applyNeklid — global overlay of per-axis sin oscillations
+  Palette.js        named color palette (CoM, support, gravity, body markers, …)
 
 src/library/    POSE LIBRARY — defined once, imported everywhere
   Poses.js          stand, tpose, sit, squat, wave, oneLegL/R, lunge, leanForward, ...

@@ -39,13 +39,20 @@ Sloučí dema 01+02+03+05+07 do jedné stránky. Iterace uzavřena v Sezení 7 (
 
 Sjednotí dynamická dema (04+09+11+12+13) přes nový `Stickman` model se `status` atributem a `animate(dt)` metodou.
 
-- [~] **Vrstva `src/character/`** — prototyp hotový (Sezení 5):
-  - [x] `Status.js` — enum (10 stavů, 4 implementované)
-  - [~] `Animations.js` — STAND, SIT, WALK, LAY hotové; chybí RUN, SWIM, CLIMB, JUMP, SLEEP, DANCE
+- [~] **Vrstva `src/character/`** — prototyp hotový (Sezení 5), rozšířený v Sezení 8:
+  - [x] `Status.js` — enum (10 stavů, 5 implementovaných: STAND, SIT, WALK, RUN, LAY)
+  - [~] `Animations.js` — STAND (s idle/Drift), SIT, WALK, RUN (Jog/Sprint), LAY hotové; chybí SWIM, CLIMB, JUMP, SLEEP. DANCE = preset Status.STAND idle (ne separátní animace)
   - [x] `Stickman.js` — wrapper s `setStatus`, `setParams`, `animate(dt)` + plynulé přechody (cubic ease-out, default 0.4 s)
-- [ ] **Pose library expansion** v `src/library/Poses.js`: SIT1..5, RUN cycle, JUMP_PREP/AIR/LAND, SLEEP, DANCE_*
+- [x] **F2.1 Sezení 8 — Drift + Run + Neklid + Dance preset:**
+  - [x] `animateRun` + `RUN_PRESETS` (jog tempo 1.6 / sprint tempo 2.4) — větší stepAmp, kneeLift, forwardLean, ohnutý loket běžce. Sprint kalibrován: forwardLean 30°, kneeLift 150° (knee drive)
+  - [x] `animateStand` rozšířen o Drift (= budget-based random walk, spec z IDEAS.md): lazy state v `params._drift`, quint ease-out per cyklus, root rotace v poolu s `rootRange = 90°` (plný drift)
+  - [x] **Dance jako preset**, ne animace: `setStatus(STAND, { idle: true, fraction: 0.5, cycleDuration: 60/110, rootRange: 8 })` = drift v rytmu, omezený root pro stabilitu
+  - [x] **Neklid jako globální overlay** v `src/util/Neklid.js`: sin oscilace per-osa s deterministickou frekvencí (hash z `joint.axis`), level 0–10 → max 5° per kloub / 4° root. Aplikuje se PO `Stickman.animate` v render loopu, funguje pro VŠECHNY režimy
+  - [x] **Bug fix** v procedurálních animacích: `animateWalk/Run` volají `skeleton.reset()` na začátku — bez něj by úhly z předchozí animace (např. Driftu, který nastaví všech 22 os) přetrvávaly v ne-přepsaných osách napořád
+  - [x] `demo02_stresstest.html` přepsán podle vzoru Demo 01: 3-column layout, levý panel POSES (Reset/Dance/Drift) + STATUS (Walk/Jog/Sprint), pravý panel jen sekce „Globální → Neklid". Debug overlay (CoM/gravity/body/tooltip) vždy ON
+- [ ] **Pose library expansion** v `src/library/Poses.js`: SIT1..5, JUMP_PREP/AIR/LAND, SLEEP
   - LAY varianty (`layStarfish`, `layChill`, `laySide`, `layReader`, `layRecline`) už existují z F1 — přidat do `Animations.LAY` přes `params.variant`
-- [~] **`demos/demo02_stresstest.html`** — prototyp hotový (Sezení 5): button group STAND/SIT/WALK/LAY + slidery WALK params + plynulé přechody. Chybí: další stavy, variant selector LAY, FPS / debug overlay.
+- [ ] **Bio/Fyzio episodické akce** (drbání, prohrábnutí vlasů, weight shift, založené ruce) — state machine nad STAND idle; viz IDEAS.md
 - [ ] Smazat `demos/demo04_animation.html`, `demo09_walk.html`, `demo11_swim.html`, `demo12_climb.html`, `demo13_ikwalk.html` *(až po dokončení F2 — jejich logika musí být v `Animations.js`)*
 - [ ] Aktualizovat `index.html` + `README.md` (až po dokončení F2)
 

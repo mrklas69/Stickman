@@ -96,4 +96,48 @@ Rozumné rozšíření. Posunout do TODO až bude pose library větší (= user 
 
 ### Status
 
-Posunout do TODO ve F2 fázi (RUN / SWIM / JUMP / SLEEP / DANCE — k STAND přidat idle variantu). Inspector zatím má quint easing + full Random (= odlišný účel: diversity check, ne idle).
+**→ DONE (Sezení 8):** Drift implementován v `animateStand` jako idle režim přes `params.idle = true`. Spec dodržena: 22 os v poolu (19 DOF + 3 root pseudo-osy), `fraction = 0.25`, `step = 5`, `cycleDuration = 1.4 s`, quint ease-out per cyklus. Drobná úprava proti spec: root osy mají `rootRange = 90°` (= plný drift, postava se může pomalu naklánět do horizontály) místo původně navrhovaných ±8°. Drobný kontrast: rootRange = 8° se používá pro „Dance preset" (= drift v rytmu, omezený root pro stabilitu).
+
+## Bio/Fyzio — episodické mikroanimace *(Sezení 8)*
+
+**Kandidát na F2.x.** Když postava stojí v idle (Drift / Stand), občas (každých N sekund) se „zachová lidsky" — podrbe, prohrábne si vlasy, založí ruce, přešlápne na druhou nohu. Liší se od Drift tím, že:
+
+- **Drift** = kontinuální drobné nahodilé pohyby
+- **Bio/Fyzio** = diskrétní akce s identitou (= rozpoznatelné gesto), 1–3 sekundy
+
+### Architektura
+
+State machine NAD STAND idle:
+
+1. **Random timer:** každých `T` sekund (např. 5–15 s, uniform random) trigger
+2. **Action picker:** vybere náhodnou akci z registrované sady
+3. **Spuštění akce:** Stickman přepne dočasně na `Status.IDLE_ACTION` (nebo přímo modifikuje aktuální idle), aplikuje pose-cyklickou mikroanimaci 1–3 s
+4. **Návrat:** po dokončení akce zpět do Drift (nebo původního idle režimu)
+
+### Akce — minimální sada (3 pro draft)
+
+| Akce | Popis | Trvání | Klouby |
+|---|---|---|---|
+| `scratchHead` | ruka jde k hlavě, krátké pohybování dlaní (drbání) | 2 s | shoulderR + elbowR (do ~150°) + neck.x |
+| `foldArms` | obě ruce přes hrudník, pohyb 1.5 s, drží 1 s, pohyb zpět | 3 s | shoulderL/R.x ~70 + elbowL/R.x ~120 |
+| `weightShift` | přenos váhy z levé na pravou nohu (= „fidget shuffle") | 1.5 s | hipL/R.x + kneeL/R.x antifázově |
+
+### Implementace — možné přístupy
+
+| Varianta | Plus | Minus |
+|---|---|---|
+| **(a) Pose-based:** každá akce = sekvence pose snapshotů, Pose.lerp mezi nimi | KISS, lze authorovat v Inspectoru | Hodně pose objektů (3 akce × 3-5 keyframes) |
+| **(b) Procedurální:** každá akce = funkce `(time, params)` jako WALK | Méně dat | Víc ad-hoc kódu, hůř laditelné |
+| **(c) Hybrid:** keyframes s lerp mezi nimi (jako After Effects) | Best of both | Vyžaduje keyframe scheduler |
+
+Doporučení: **(a) Pose-based** — využije existující `Pose.lerp` infrastrukturu, akce se dají authorovat v Inspectoru pomocí Copy JSON workflow (memory `feedback_pose_authoring_workflow`).
+
+### Otevřené otázky
+
+- Spustit Bio/Fyzio jen ve STAND idle, nebo i ve WALK / SIT (= hybrid s primary animací)?
+- Triggery: čistě timer, nebo eventovat (= postava reaguje na něco — kdo se přiblíží, slyšení zvuku)?
+- Statemachine = třída `Brain` (plánovaná pro F3 akvárium) nebo nezávislá?
+
+### Status
+
+Odložené do F2.x. Spec hotová, čeká na rozhodnutí timing (probably hned po Bio/Fyzio v F3 budou potřeba i Brain timery, takže bude rozumné to dělat společně).

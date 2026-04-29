@@ -198,18 +198,72 @@ Lineární interpolace mezi dvěma pózami pro `t ∈ [0,1]`:
 
 Enum stavu postavy v `src/character/Status.js`: `STAND`, `SIT`, `WALK`, `RUN`, `SWIM`, `CLIMB`, `JUMP`, `LAY`, `SLEEP`, `DANCE`. `Object.freeze`d (= zamrazený). Hodnoty jsou stringy (lepší debug + serializace). Atribut na `Stickman`, ne `Skeleton`.
 
-Stavy bez registrované animace v `ANIMATIONS` mapě se chovají jako no-op (postava zůstane v poslední pose) — záměrné, ať Stickman nepadá na neimplementovaných stavech. Aktuálně implementované: STAND, SIT, WALK, LAY.
+Stavy bez registrované animace v `ANIMATIONS` mapě se chovají jako no-op (postava zůstane v poslední pose) — záměrné, ať Stickman nepadá na neimplementovaných stavech. Aktuálně implementované: STAND (s idle/Drift režimem), SIT, WALK, RUN (Jog/Sprint presety), LAY. DANCE NENÍ samostatná animace = preset přes STAND idle (viz níže).
 
-### Animations / Animate *(F2 prototyp — Sezení 5)*
+### Animations / Animate *(F2 prototyp — Sezení 5, rozšířeno v 8)*
 
 `src/character/Animations.js` — registr `Status → fn(skeleton, time, params)`. Funkce mutuje skeleton (volá `setAngle`, `rootPosition`, …), nemá return value.
 
-Defaulty parametrů exportované jako `DEFAULTS_WALK` — single source pro slidery v demu. Demo si při `setStatus()` může předat patch (např. `{ tempo: 1.5 }`), zbytek zdědí z defaults.
+Defaulty parametrů exportované jako `DEFAULTS_WALK`, `RUN_PRESETS.jog/sprint`, `DEFAULTS_DRIFT` — single source pro slidery / setStatus calls. Demo si při `setStatus()` může předat patch (např. `{ tempo: 1.5 }`), zbytek zdědí z defaults.
 
 Metoda `stickman.animate(dt)` — posune `Stickman.time` o `dt` a zavolá registrovanou funkci. Animace mohou být:
 
-- **Pose-based** (STAND, SIT, LAY): `pose.apply(skeleton)` — jeden řádek, idempotentní.
-- **Procedurální cyklické** (WALK, plánovaný RUN, SWIM): `time → angles` mapping, žádný state.
+- **Pose-based** (STAND default, SIT, LAY): `pose.apply(skeleton)` — jeden řádek, idempotentní; pose.apply interně volá `skeleton.reset()` před setAngle.
+- **Procedurální cyklické** (WALK, RUN): `time → angles` mapping. **Konvence: musí volat `skeleton.reset()` na začátku** — bez něj by úhly z předchozí animace (typicky Drift, který nastaví všech 22 os) přetrvávaly v ne-přepsaných osách napořád.
+- **Stavové procedurální** (STAND idle / Drift): drží `params._drift = { from, target, cycleStart, cycleDuration, fraction, ... }` (lazy init při prvním volání). Random walk k cíli; po dorazu nový cíl.
+
+### Drift *(Sezení 8)*
+
+Idle režim STAND zapnutý přes `params.idle = true`. Algoritmus = budget-based random walk (spec původně v IDEAS.md):
+
+1. Sestav vektor 22 os (19 DOF + 3 root pseudo-osy s `rootRange = 90°`)
+2. Pool = N × 100 bodů; budget = `fraction × pool`
+3. Generuj plně random target per osu (uniform v limits)
+4. Iteruj: pick random axis → consume = `min(STEP, |delta|, budget)` → posuň `intermediate[i]` o `consume × sign(delta)` → `budget -= consume`
+5. Po dorazu (`time - cycleStart >= cycleDuration`) nový target generován od aktuálního `target` (= `from = previous target`)
+
+`DEFAULTS_DRIFT`: `fraction = 0.25`, `cycleDuration = 1.4 s`, `step = 5`, `rootRange = 90°`.
+
+Interpolace per cyklus = `Pose.lerp(from, target, eased)` s **quint ease-out** (`1 - (1-t)⁵`) — rychlý start, velmi pomalý dojezd → „intent" pocit.
+
+### Dance preset *(Sezení 8)*
+
+Dance NENÍ samostatná animace, je to konfigurační preset Status.STAND idle:
+
+```js
+stickman.setStatus(Status.STAND, {
+    idle: true,
+    fraction: 0.5,             // 2× Drift = větší swing
+    cycleDuration: 60/110,     // = 0.545 s = jeden beat při 110 BPM
+    rootRange: 8,              // omezený (postava neztratí stabilitu)
+});
+```
+
+= drift v rytmu, omezený root pro stabilitu. **Žádný `animateDance` ani Status.DANCE registr** — KISS. (Status.DANCE v enum zůstává pro budoucí použití, např. specializovaná taneční animace.)
+
+### Neklid *(Sezení 8)*
+
+Globální overlay drobných oscilací nad PRIMÁRNÍ animaci. Aplikuje se v render loopu PO `Stickman.animate(dt)`:
+
+```js
+scene.onUpdate((dt) => {
+    globalTime += dt;
+    stickman.animate(dt);                       // 1. primárka
+    applyNeklid(skel, globalTime, neklidLevel); // 2. overlay nad to
+    skel.snapToFloor(FLOOR_Y);
+    view.update();
+});
+```
+
+Implementace `src/util/Neklid.js`:
+
+- Per-osa deterministická frekvence (0.3–0.8 Hz) + fáze (0–1) přes hash z klíče `joint.axis` (resp. `root.x/y/z`). Cache → každá osa má svou unikátní noise charakteristiku napříč spuštěními.
+- Mapping: `level ∈ [0, 10]` → max ~5° per kloub, ~4° per root osa.
+- Fungue pro VŠECHNY režimy (Walk, Sprint, Drift, Reset, Sit, Lay) — nezávislé na Status.
+
+**Žádný kumulativní bug:** Stickman.animate volá `skeleton.reset()` každý frame (přes pose.apply nebo explicitně v procedurálních animacích); Neklid přidá noise nad čerstvou primárku. Frame N+1 reset smaže předchozí noise.
+
+### Stickman *(F2 prototyp — Sezení 5)*
 
 ### Stickman *(F2 prototyp — Sezení 5)*
 

@@ -2,32 +2,73 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Demo 02 — Stress test (prototyp F2)</title>
+    <title>Demo 02 — Stress test (F2 prototyp)</title>
+    <link rel="icon" href="data:,">                  <!-- KISS: zabrání 404 favicon -->
+
     <style>
         body { margin: 0; overflow: hidden; background: #1a1a22;
                font-family: sans-serif; color: #ddd; }
-        #info { position: absolute; top: 10px; left: 0; right: 0;
-                text-align: center; pointer-events: none;
-                text-shadow: 1px 1px 2px black; }
-        #info h2 { margin: 0 0 4px 0; }
-        #info p  { margin: 0; opacity: 0.7; font-size: 0.9em; }
-        #panel { position: absolute; top: 80px; left: 20px;
-                 background: #2a2a35; padding: 14px 18px;
-                 border-radius: 6px; border: 1px solid #444;
-                 width: 300px; z-index: 100;
-                 display: flex; flex-direction: column; gap: 6px; }
-        #panel hr { border: 0; border-top: 1px solid #444; margin: 8px 0; }
-        button.act { padding: 10px; background: #444; color: #fff;
-                     border: 0; border-radius: 4px; cursor: pointer;
-                     font-size: 0.9em; }
-        button.act:hover { background: #ffaa66; color: #1a1a22; }
-        #stats { position: absolute; bottom: 10px; left: 10px;
-                 background: rgba(0,0,0,0.55); padding: 10px 14px;
-                 border-radius: 6px; font-size: 0.85em; line-height: 1.55;
-                 min-width: 240px; }
-        .ok  { color: #44ff66; font-weight: bold; }
-        .bad { color: #ff4444; font-weight: bold; }
-        .status { color: #ffaa66; font-weight: bold; }
+
+        /* === Layout: stejný 3-column grid jako Demo 01 (izomorfismus) === */
+        #app {
+            position: relative;
+            display: grid;
+            grid-template-columns: 200px 1fr 320px;
+            grid-template-areas: "left viewport right";
+            height: 100vh;
+            width: 100vw;
+        }
+        #viewport     { grid-area: viewport; position: relative;
+                        min-width: 0; min-height: 0; overflow: hidden; }
+        #panel-left   { grid-area: left;   background: #22222b; border-right: 1px solid #444;
+                        overflow-y: auto; padding: 14px 12px; box-sizing: border-box; }
+        #panel-right  { grid-area: right;  background: #22222b; border-left: 1px solid #444;
+                        overflow-y: auto; padding: 14px 14px; box-sizing: border-box; }
+
+        /* Hlavička v rohu viewportu */
+        #info { position: absolute; top: 10px; left: 10px;
+                pointer-events: none; text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 2px 0; font-size: 1.05em; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.82em; }
+
+        /* === Panel-left: stejný styling jako demo01 === */
+        #panel-left h3 { margin: 0 0 10px 0; color: #ffaa66;
+                         font-size: 0.85em; text-transform: uppercase;
+                         letter-spacing: 0.5px; }
+        #panel-left h4.pose-section { margin: 14px 0 8px 0;
+                                       color: #ffaa66;
+                                       font-size: 0.85em;
+                                       text-transform: uppercase;
+                                       letter-spacing: 0.5px;
+                                       font-weight: normal;
+                                       border-top: 1px solid #333; padding-top: 12px; }
+        .pose-btn {
+            display: block; width: 100%; padding: 8px 10px;
+            background: #2a2a35; color: #ddd; border: 1px solid #3a3a45;
+            border-radius: 4px; cursor: pointer; margin-bottom: 4px;
+            text-align: left; font-size: 0.85em;
+        }
+        .pose-btn:hover  { background: #3a3a45; }
+        .pose-btn.active { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
+
+        /* === Panel-right: stejný styling jako demo01 (slidery) === */
+        #panel-right h3 { margin: 0 0 8px 0; color: #ffaa66;
+                          font-size: 0.85em; text-transform: uppercase;
+                          letter-spacing: 0.5px; }
+        #panel-right .group h3 { margin: 0 0 6px 0;
+                                  font-family: monospace; color: #88ccff;
+                                  font-size: 0.85em;
+                                  text-transform: none; letter-spacing: 0; }
+        .group { margin-bottom: 12px; padding-bottom: 8px;
+                 border-bottom: 1px solid #333; }
+        .group:last-child { border-bottom: 0; }
+        .row { display: flex; align-items: center; margin: 3px 0; gap: 6px;
+               font-size: 0.78em; }
+        .row label { width: 92px; color: #ccc; font-family: monospace;
+                     font-size: 14px; }
+        .row input[type=range] { flex: 1; min-width: 0; accent-color: #ffaa66; }
+        .row .value { width: 44px; text-align: right; font-family: monospace;
+                      color: #88ccff; }
     </style>
     <script type="importmap">
     { "imports": {
@@ -37,198 +78,201 @@
     </script>
 </head>
 <body>
-    <div id="info">
-        <h2>Demo 02 — Stress test (prototyp F2)</h2>
-        <p>Stickman wrapper se status atributem a animate(dt). Prototyp: STAND a WALK.</p>
+<div id="app">
+    <!-- Levý panel: pózy (Reset/Dance/Drift) + status (Walk/Jog/Sprint) -->
+    <div id="panel-left">
+        <h3>Pózy</h3>
+        <div id="poses-list"></div>
+
+        <h4 class="pose-section">Status</h4>
+        <div id="status-list"></div>
     </div>
 
-    <div id="panel"></div>
-    <div id="stats"></div>
+    <!-- Hlavní viewport (3D scéna) -->
+    <div id="viewport">
+        <div id="info">
+            <h2>Demo 02 — Stress test</h2>
+            <p>Reset / Dance / Drift / Walk / Jog / Sprint. Neklid = globální overlay přes vše.</p>
+        </div>
+    </div>
 
-    <script type="module">
-        import * as THREE       from 'three';
-        import { Skeleton }     from '../src/model/Skeleton.js';
-        import { StickmanView } from '../src/view/StickmanView.js';
-        import { BasicScene }   from '../src/scene/BasicScene.js';
-        import { Stickman }     from '../src/character/Stickman.js';
-        import { Status }       from '../src/character/Status.js';
-        import { DEFAULTS_WALK } from '../src/character/Animations.js';
-        import {
-            addPanel, addSlider, addToggle, addButtonGroup, injectStyles,
-        } from '../src/util/DemoUI.js';
+    <!-- Pravý panel: globální Neklid (overlay nad jakoukoli animaci) -->
+    <div id="panel-right">
+        <h3>Globální</h3>
+        <div id="params-container"></div>
+    </div>
+</div>
 
-        // === 1. Setup scény + postavy ===
-        const H = 8;
-        const FLOOR_Y = -H / 2;
+<script type="module">
+    import { Skeleton }     from '../src/model/Skeleton.js';
+    import { StickmanView } from '../src/view/StickmanView.js';
+    import { DebugView }    from '../src/view/DebugView.js';
+    import { BasicScene }   from '../src/scene/BasicScene.js';
+    import { Stickman }     from '../src/character/Stickman.js';
+    import { Status }       from '../src/character/Status.js';
+    import { applyNeklid }  from '../src/util/Neklid.js';
+    import {
+        DEFAULTS_WALK, RUN_PRESETS, DEFAULTS_DRIFT,
+    } from '../src/character/Animations.js';
 
-        const skel  = new Skeleton(H);
-        const view  = new StickmanView(skel);
-        const scene = new BasicScene({
-            cameraHeight: 0, cameraDistance: 18,
-            floorY: FLOOR_Y,
+    // =========================================================================
+    // 1. Model + scéna + view (stejné nastavení jako demo01 = izomorfismus)
+    // =========================================================================
+    const H = 8;
+    const FLOOR_Y = -H / 2;
+    const skel = new Skeleton(H);
+    const view = new StickmanView(skel);
+
+    const viewport = document.getElementById('viewport');
+    const scene = new BasicScene({
+        cameraHeight: 0,
+        cameraDistance: 18,
+        container: viewport,
+        floorY: FLOOR_Y,
+    });
+    scene.scene.add(view.group);
+
+    // =========================================================================
+    // 2. DebugView — všechny vrstvy ON (jako v demo01)
+    // =========================================================================
+    const debug = new DebugView(view, { floorY: FLOOR_Y });
+    debug.attachToScene(scene.scene);
+    debug.setRaycaster(scene.renderer.domElement, scene.camera);
+    debug.setVisible('com', true);
+    debug.setVisible('gravity', true);
+    debug.setVisible('body', true);
+    debug.setVisible('tooltip', true);
+
+    // =========================================================================
+    // 3. Stickman wrapper — drží status + animace + plynulé přechody
+    // =========================================================================
+    const stickman = new Stickman(skel, Status.STAND, {});
+
+    // Globální čas pro Neklid overlay (kontinuální napříč setStatus přechody;
+    // stickman.time se resetuje při setStatus, ale Neklid musí běžet plynule).
+    let globalTime = 0;
+
+    // Neklid level — řízený sliderem v pravém panelu. 0 = no-op.
+    let neklidLevel = 0;
+
+    // =========================================================================
+    // 4. Pravý panel — slidery (zatím jen Neklid; další parametry přidáme,
+    //    až budeme cítit, že chybí).
+    // =========================================================================
+    const paramsContainer = document.getElementById('params-container');
+
+    function addGroup(title) {
+        const g = document.createElement('div');
+        g.className = 'group';
+        const h = document.createElement('h3');
+        h.textContent = title;
+        g.appendChild(h);
+        paramsContainer.appendChild(g);
+        return g;
+    }
+
+    /** Slider helper — onChange(v) volá při tažení. */
+    function addSlider(parent, label, min, max, step, initial, onChange) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const decimals = step < 1 ? 1 : 0;
+        row.innerHTML = `
+            <label>${label}</label>
+            <input type="range" min="${min}" max="${max}" step="${step}" value="${initial}">
+            <span class="value">${initial.toFixed(decimals)}</span>
+        `;
+        const input = row.querySelector('input');
+        const valueEl = row.querySelector('.value');
+        input.addEventListener('input', () => {
+            const v = parseFloat(input.value);
+            valueEl.textContent = v.toFixed(decimals);
+            onChange(v);
         });
-        scene.scene.add(view.group);
+        parent.appendChild(row);
+    }
 
-        // CoM marker + support polygon (převzato z demo09 — vizuální debug)
-        const comMarker     = view.createCenterOfMassMarker(FLOOR_Y);
-        const supportMarker = view.createSupportPolygonMarker(FLOOR_Y);
-        scene.scene.add(comMarker);
-        scene.scene.add(supportMarker);
+    // === Neklid sekce ===
+    // 0 = no-op, 10 = max výchylka (~5° per kloub, ~4° root). Aplikuje se
+    // PO Stickman.animate v render loopu — funguje pro VŠECHNY režimy
+    // (Walk, Sprint, Drift, Reset, …).
+    const neklidGroup = addGroup('Neklid');
+    addSlider(neklidGroup, 'Intenzita', 0, 10, 0.5, 0,
+        (v) => { neklidLevel = v; },
+    );
 
-        // CoM sféra přes vše (jako v demo09 — sféra je v pase, schovávala by se v trupu)
-        const comSphere = comMarker.userData.sphere;
-        comSphere.material.depthTest = false;
-        comSphere.material.transparent = true;
-        comSphere.material.opacity = 0.85;
-        comSphere.renderOrder = 999;
+    // =========================================================================
+    // 5. Levý panel — tlačítka (stejný layout jako demo01)
+    // =========================================================================
+    const posesContainer  = document.getElementById('poses-list');
+    const statusContainer = document.getElementById('status-list');
+    const buttons = {};
 
-        // Stickman = wrapper kolem skeleton, drží status + animate(dt).
-        // Start ve STAND — postava stojí klidně, dokud nestiskneme WALK.
-        // Spread copy: každý Stickman musí mít vlastní params, jinak by 2 instance
-        // sdílely stejnou referenci a změna jednou by ovlivnila i druhou.
-        const stickman = new Stickman(skel, Status.STAND, { ...DEFAULTS_WALK });
-
-        // === 2. Globální flagy řízené UI ===
-        let snapEnabled = true;
-        let paused      = false;
-
-        // === 3. UI panel ===
-        injectStyles();
-        const panel = addPanel('panel', 'Status');
-
-        // Button group: přepíná Stickman.status. Klíče = stringy ze Status enumu,
-        // ať to máme jednoduché (žádný extra mapping).
-        //
-        // POZOR: NEPŘEDÁVÁME activeKey argument, ten by synchronně zavolal callback,
-        // a callback referuje tempoUI/ampUI/... které jsou deklarované teprve POD
-        // tímto blokem (Temporal Dead Zone — const-y nejsou dostupné před deklarací).
-        // Místo toho voláme bg.activate(Status.STAND) ručně až za vytvořením sliderů.
-        const bg = addButtonGroup(panel,
-            [
-                { key: Status.STAND, label: 'STAND' },
-                { key: Status.SIT,   label: 'SIT' },
-                { key: Status.WALK,  label: 'WALK' },
-                { key: Status.LAY,   label: 'LAY' },
-            ],
-            (key) => {
-                // setStatus přebírá kopii defaultů (kvůli sliderům — params si je
-                // pak stickman drží a slidery je mutují přes setParams).
-                // Spread = shallow copy, na enum/scalary stačí.
-                stickman.setStatus(key, { ...DEFAULTS_WALK });
-                // Po změně status synchronizujeme slidery na default (= konzistentní UX).
-                tempoUI.set(DEFAULTS_WALK.tempo);
-                ampUI.set(DEFAULTS_WALK.stepAmp);
-                kneeUI.set(DEFAULTS_WALK.kneeLift);
-                twistUI.set(DEFAULTS_WALK.twistAmp);
-                swayUI.set(DEFAULTS_WALK.swayAmp);
-                armUI.set(DEFAULTS_WALK.armSwing);
-            }
-        );
-
-        // Oddělovač
-        const hr1 = document.createElement('hr'); panel.appendChild(hr1);
-        const h3 = document.createElement('h3');
-        h3.className = 'duip-h3'; h3.textContent = 'Walk parametry';
-        panel.appendChild(h3);
-
-        // Slidery — onChange volá stickman.setParams() (= mutace bez resetu času).
-        // Tah za slider při běžící chůzi tedy plynule mění tempo/amplitudu,
-        // postava nepřeskočí na phase 0.
-        const tempoUI = addSlider(panel, {
-            label: 'Tempo', min: 0.2, max: 2.0, step: 0.1,
-            value: DEFAULTS_WALK.tempo, unit: ' Hz',
-            onChange: (v) => stickman.setParams({ tempo: v }),
+    function addBtn(parent, key, label, onClick) {
+        const btn = document.createElement('button');
+        btn.className = 'pose-btn';
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+            for (const k in buttons) buttons[k].classList.toggle('active', k === key);
+            onClick();
         });
-        const ampUI = addSlider(panel, {
-            label: 'Rozkrok', min: 10, max: 60, step: 2,
-            value: DEFAULTS_WALK.stepAmp, unit: '°',
-            onChange: (v) => stickman.setParams({ stepAmp: v }),
-        });
-        const kneeUI = addSlider(panel, {
-            label: 'Zdvih kol.', min: 0, max: 120, step: 5,
-            value: DEFAULTS_WALK.kneeLift, unit: '°',
-            onChange: (v) => stickman.setParams({ kneeLift: v }),
-        });
-        const twistUI = addSlider(panel, {
-            label: 'Twist hrudn.', min: 0, max: 20, step: 1,
-            value: DEFAULTS_WALK.twistAmp, unit: '°',
-            onChange: (v) => stickman.setParams({ twistAmp: v }),
-        });
-        const swayUI = addSlider(panel, {
-            label: 'Vrávorání', min: 0, max: 15, step: 1,
-            value: DEFAULTS_WALK.swayAmp, unit: '°',
-            onChange: (v) => stickman.setParams({ swayAmp: v }),
-        });
-        const armUI = addToggle(panel, {
-            label: 'Ruce v protisměru', value: DEFAULTS_WALK.armSwing,
-            onChange: (v) => stickman.setParams({ armSwing: v }),
-        });
+        parent.appendChild(btn);
+        buttons[key] = btn;
+    }
 
-        // Oddělovač + ostatní toggly/buttony
-        const hr2 = document.createElement('hr'); panel.appendChild(hr2);
+    // === Dance preset — Drift v rytmu, omezený root ===
+    // Dance NENÍ vlastní animace, je to konfigurační preset Status.STAND idle.
+    // Klíčové parametry:
+    //   - cycleDuration = 60/110 ≈ 0.545 s (= jeden beat při 110 BPM)
+    //   - fraction = 0.5 (= 2× Drift; větší swing per cyklus = "divočejší")
+    //   - rootRange = 8° (omezené kývání trupu, postava neztratí stabilitu)
+    //
+    // Pokud chceš jiné BPM, změň `BPM_DANCE` níže. Pro draft bez sliderem.
+    const BPM_DANCE = 110;
+    const DANCE_PRESET = {
+        idle: true,
+        fraction: 0.5,
+        cycleDuration: 60 / BPM_DANCE,
+        rootRange: 8,
+    };
 
-        addToggle(panel, {
-            label: 'Snap to floor', value: snapEnabled,
-            onChange: (v) => { snapEnabled = v; },
-        });
+    // === PÓZY: Reset, Dance, Drift ===
+    // Pořadí: Reset (static) → Dance (rhythmic, constrained root) → Drift
+    // (open random walk, plný root ±90°). Postupně rostoucí volnost.
+    addBtn(posesContainer, 'reset', 'Reset',
+        () => stickman.setStatus(Status.STAND, {}));
 
-        const pauseBtn = document.createElement('button');
-        pauseBtn.className = 'act';
-        pauseBtn.textContent = 'Pauza';
-        pauseBtn.addEventListener('click', () => {
-            paused = !paused;
-            pauseBtn.textContent = paused ? 'Pokračovat' : 'Pauza';
-        });
-        panel.appendChild(pauseBtn);
+    addBtn(posesContainer, 'dance', 'Dance',
+        () => stickman.setStatus(Status.STAND, { ...DANCE_PRESET }));
 
-        // Až teď, KDY VŠECHNY SLIDERY JSOU INICIALIZOVANÉ, bezpečně aktivujeme STAND.
-        // Volání spustí callback button groupu — ten potřebuje tempoUI a spol.
-        bg.activate(Status.STAND);
+    addBtn(posesContainer, 'drift', 'Drift',
+        () => stickman.setStatus(Status.STAND, { ...DEFAULTS_DRIFT }));
 
-        // === 4. Render smyčka ===
-        scene.onUpdate((delta) => {
-            if (!paused) {
-                // Animate posune Stickman.time o dt a aplikuje aktuální animaci
-                // na skeleton (mutuje úhly).
-                stickman.animate(delta);
-                if (snapEnabled) skel.snapToFloor(FLOOR_Y);
-            }
-            // View čte úhly ze skeletu a aplikuje je na Three.js objekty
-            view.update();
-            view.updateCenterOfMassMarker(comMarker, true);
-            view.updateSupportPolygonMarker(supportMarker);
-            updateStats();
-        });
+    // === STATUS: Walk, Jog, Sprint ===
+    addBtn(statusContainer, 'walk', 'Walk',
+        () => stickman.setStatus(Status.WALK, { ...DEFAULTS_WALK }));
+    addBtn(statusContainer, 'jog', 'Jog',
+        () => stickman.setStatus(Status.RUN, { ...RUN_PRESETS.jog }));
+    addBtn(statusContainer, 'sprint', 'Sprint',
+        () => stickman.setStatus(Status.RUN, { ...RUN_PRESETS.sprint }));
 
-        // === 5. Stats panel (read-only) ===
-        const statsEl = document.getElementById('stats');
-        function updateStats() {
-            const stable = skel.isStable();
-            const com = skel.getCenterOfMass();
-            // Pro WALK ukazujeme phase + stage; pro STAND jen čas.
-            let extra = '';
-            if (stickman.status === Status.WALK) {
-                const tempo = stickman.params.tempo ?? DEFAULTS_WALK.tempo;
-                const phaseL = (stickman.time * tempo) % 1;
-                const stage = (phaseL < 0.5)
-                    ? 'L SWING / R stance'
-                    : 'L STANCE / R swing';
-                extra = `<div><strong>Phase L:</strong> ${phaseL.toFixed(2)} (${stage})</div>`;
-            }
-            statsEl.innerHTML = `
-                <div><strong>Status:</strong>
-                    <span class="status">${stickman.status.toUpperCase()}</span></div>
-                <div><strong>Time:</strong> ${stickman.time.toFixed(2)} s</div>
-                ${extra}
-                <div><strong>Support:</strong> ${skel.supportPoints.join(', ')}</div>
-                <div><strong>Stabilita:</strong>
-                    <span class="${stable ? 'ok' : 'bad'}">${stable ? 'STABILNÍ' : 'PADÁ'}</span>
-                </div>
-                <div><strong>CoM (xz):</strong> x=${com.x.toFixed(2)}, z=${com.z.toFixed(2)}</div>
-            `;
-        }
+    buttons.reset.classList.add('active');
 
-        scene.start();
-    </script>
+    // =========================================================================
+    // 6. Render loop — Stickman.animate primární, applyNeklid overlay,
+    //    snap-to-floor na konec.
+    // =========================================================================
+    skel.snapToFloor(FLOOR_Y);
+    view.update();
+
+    scene.onUpdate((dt) => {
+        globalTime += dt;
+        stickman.animate(dt);                      // 1. primární animace
+        applyNeklid(skel, globalTime, neklidLevel); // 2. globální overlay
+        skel.snapToFloor(FLOOR_Y);                  // 3. drž na podlaze
+        view.update();
+        debug.update();
+    });
+    scene.start();
+</script>
 </body>
 </html>
