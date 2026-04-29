@@ -32,14 +32,16 @@ src/scene/      SCÉNA — společné prostředí
 src/util/       UTILITY — bez Three.js, čisté funkce
   Geometry.js       — distXZ, distPointToSegmentXZ, convexHullXZ, pointInConvexPolygonXZ
   DemoUI.js         — addSlider, addToggle, addButtonGroup, injectStyles
+  Neklid.js         — applyNeklid (globální overlay drobných oscilací nad primárkou)
+  Palette.js        — PAL barvy (CoM, support, gravity, body markery, …)
 
 src/library/    KNIHOVNA POSE — definované jednou, importované všude
-  Poses.js          — stand, tpose, sit, squat, wave, oneLegL/R, lunge, leanForward, ...
+  Poses.js          — STANCE_POSES / SIT_POSES / LIE_POSES (Inspector) + BASIC/BALANCE/HEAD_SUPPORT pro stará dema
 
 src/character/  CHARACTER — wrapper Stickman + Status + Animations
   Status.js         — enum (STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE)
-  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK
-  Stickman.js       — wrapper { skeleton, status, time, params }, setStatus, animate(dt) s plynulými přechody
+  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK / RUN_PRESETS / DEFAULTS_DRIFT
+  Stickman.js       — wrapper { skeleton, status, time, params, transitionDuration, … }, setStatus, animate(dt) s plynulými přechody
 
 demos/          DEMO HTML — každé demo je samostatná stránka
 .source/        SCRATCH — vyřazené prototypy (mimo architekturu)
@@ -75,9 +77,10 @@ demos/          DEMO HTML — každé demo je samostatná stránka
 - `solveTwoBoneIK` při pootočené kostře varuje (jednou) v console
 - Plavání (demo11) má `rootRotation.x = ±90` — IK by tam selhalo, není potřeba
 
-### 6. Pose.lerp — supportPoints jsou DISKRÉTNÍ
-- Úhly se lineárně interpolují
-- `supportPoints` se přepne v půli (`t < 0.5 ? a : b`) — nelze interpolovat množinu
+### 6. Pose.lerp interpoluje úhly + root, body opory ne
+- `Pose` drží jen `angles`, `rootPosition`, `rootRotation` — žádné `supportPoints`.
+- Lerp interpoluje úhly per-osa a root pos/rot lineárně.
+- Aktuální contact joints určuje `Skeleton.getSupportPoints` z geometrie po aplikaci úhlů (= dynamic).
 
 ## Konvence kódu
 
@@ -87,6 +90,10 @@ demos/          DEMO HTML — každé demo je samostatná stránka
 - **UI v demech:** přes `src/util/DemoUI.js` (nepsat boilerplate `addEventListener` ručně).
 - **Geometrie:** přes `src/util/Geometry.js` (žádné duplicity convex hull).
 - **Stíny + podlaha:** zapnout přes `BasicScene({ floorY: -H/2 })`. Nepoužívat `GridHelper` ručně.
+
+## Macros
+- Projektová makra: `@BEGIN`, `@END` — definována v `PROMPTS.md`. `@BEGIN` vždy končí spuštěním serveru na `localhost:8000`.
+- Globální makra: `@THINK`, `@AUDIT:CODE`, `@AUDIT:DOCS`, `@DOCS`, `@CALIBRATE` — viz `~/.claude/CLAUDE.md`.
 
 ## Workflow
 
@@ -98,7 +105,7 @@ demos/          DEMO HTML — každé demo je samostatná stránka
 
 ## Naming dem
 
-- Krátké slovo nebo zkratka po `demoNN_`: `demo04_animation`, `demo10_ik`, `demo13_ikwalk`
+- Krátké slovo nebo zkratka po `demoNN_`: `demo01_inspector`, `demo02_stresstest`, `demo10_ik`
 - Přesný popis je v `<title>` a `<h2>` v HTML
 
 ## Kde co najít

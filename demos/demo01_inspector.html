@@ -411,7 +411,7 @@
     }
 
     /**
-     * Random pose — full uniform random na všech 19 DOF + 3 root rotation
+     * Random pose — full uniform random na všech 22 DOF + 3 root rotation
      * (žádný subset, žádný budget). Účel Inspectoru = diversity check, vidět
      * krajní kombinace. Plynulejší pohyb pro idle animace = budget-based Drift,
      * implementovaný v F2 (viz IDEAS.md). Ease-out quint zvýrazní "swing"
@@ -475,8 +475,8 @@
     // 3. Sekce "SEDY/KLEKY" — pózy z SIT_POSES v jejich export pořadí
     // 4. Sekce "LEHY"       — pózy z LIE_POSES
     // Pose mimo tyto 3 sady (např. kapalasana/pincha v HEAD_SUPPORT_POSES,
-    // primitivní stand/tpose/wave/squat) se v Inspectoru nezobrazují — jsou
-    // dostupné svým vlastním demem (demo14_headsupport, demo08_lerp, …).
+    // primitivní stand/tpose/wave/squat v BASIC_POSES) se v Inspectoru nezobrazují —
+    // zůstávají exportované v Poses.js pro budoucí use.
     addPoseButton('reset', 'Reset (rest)', applyReset);
     addPoseButton('random', 'Random', applyRandom);
 

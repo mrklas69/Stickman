@@ -1,6 +1,6 @@
 // src/model/Skeleton.js
 // =============================================================================
-// Skeleton "Minimal" — 9 funkčních kloubů + 4 koncové body, celkem 15 DOF.
+// Skeleton "Minimal" — 10 funkčních kloubů + 4 koncové body, celkem 22 DOF.
 //
 // SVĚTOVÁ KONVENCE:
 //   - Postava stojí v origin a "dívá se" podél -Z (Three.js standard).
@@ -40,7 +40,6 @@ function buildProportions(H) {
     //   pelvis → torso  = bederní segment (lumbar)
     //   torso  → neck   = hrudní segment (thoracic)
     // Kloub `torso` umožňuje twist (body roll) a flexi v pase.
-    // TORSO_LENGTH = LOWER_TORSO + UPPER_TORSO (zachováno pro zpětnou kompatibilitu — žádná pose ho přímo nepoužívá).
     const LOWER_TORSO = 0.16 * H;   // pelvis → torso (½ původního)
     const UPPER_TORSO = 0.16 * H;   // torso  → neck  (½ původního)
 
@@ -50,7 +49,6 @@ function buildProportions(H) {
         HEAD_RADIUS:   0.0625 * H,  // = H/16, sféra hlavy
         LOWER_TORSO,                // pelvis → torso (bederní)
         UPPER_TORSO,                // torso → neck (hrudní)
-        TORSO_LENGTH:  LOWER_TORSO + UPPER_TORSO,  // celkový trup, pro referenci
         // SHOULDER_X = R.neck → ramenní klouby leží přesně na povrchu trupu nahoře
         SHOULDER_X:    0.075  * H,
         // HIP_X mírně > R.pelvis → pánevní klouby vyčnívají z pasu (vidět)
@@ -103,7 +101,7 @@ export class Skeleton {
         this.rootPosition = { x: 0, y: 0, z: 0 };    // umístění celé postavy ve světě
         this.rootRotation = { x: 0, y: 0, z: 0 };    // orientace ve stupních (Three.js přímo)
         // Body opory NEJSOU explicitní field — joints jsou supports automaticky.
-        // Contact body se počítají dynamicky z aktuální world Y (viz getContactPoints).
+        // Contact body se počítají dynamicky z aktuální world Y (viz getSupportPoints).
         // `supportPoints` getter níže zachován pro legacy přístup ze starých dem.
         this._build();
         this.root = this.joints.pelvis;
@@ -169,7 +167,10 @@ export class Skeleton {
         const neck = add('neck', torso,
             { x: 0, y: p.UPPER_TORSO, z: 0 },
             ['x', 'y', 'z'],
-            { x: [-30, 60], y: [-90, 90], z: [-40, 40] },
+            // x: -60 záklon (hlava výrazně nahoru — pro „po čtyřech"/"plížení", aby se hlava
+            //    s horizontálním tělem zvedla a koukala vpřed; anatomický max ~50-60° je realistický),
+            //    60 předklon (brada k hrudi)
+            { x: [-60, 60], y: [-90, 90], z: [-40, 40] },
             { x: -1, y: +1, z: +1 }
         );
         // Vršek hlavy — koncový bod (0 DOF). View tu položí sféru hlavy se středem
@@ -245,7 +246,8 @@ export class Skeleton {
             ['x', 'y', 'z'],
             // x: -30 = záklop, 140 = hluboký předkop (klečení, hluboký dřep, yoga)
             // y: -35 = vnitřní rotace (turn-in), 50 = vnější rotace (turn-out, turek)
-            { x: [-30, 140], y: [-35, 50], z: [-10, 80] },
+            // z: -10 = drobná addukce, 90 = max abdukce (Sezení 9: 80 → 90 pro plížení MID pose)
+            { x: [-30, 140], y: [-35, 50], z: [-10, 90] },
             { x: +1, y: +1, z: -1 }
         );
         // Koleno: ohyb (lýtko dozadu = +Z). Vec(0,-1,0) -θ X = +Z pro -90°. signX = -1.
@@ -267,7 +269,8 @@ export class Skeleton {
         const hipR = add('hipR', pelvis,
             { x: p.HIP_X, y: 0, z: 0 },
             ['x', 'y', 'z'],
-            { x: [-30, 140], y: [-35, 50], z: [-10, 80] },
+            // viz hipL — z.max 90 (Sezení 9 rozšíření kvůli plížení)
+            { x: [-30, 140], y: [-35, 50], z: [-10, 90] },
             { x: +1, y: -1, z: +1 }
         );
         const kneeR = add('kneeR', hipR,
@@ -279,41 +282,6 @@ export class Skeleton {
         add('ankleR', kneeR,
             { x: 0, y: -p.SHIN, z: 0 }
         );
-    }
-
-    /**
-     * Aktualizuje proporce a přepočítá lokální offsety dotčených jointů.
-     * View musí pak zavolat `rebuildBones()` na sebe (geometrie kostí drží
-     * fixní délku v meshi → musí se přebudovat).
-     *
-     * @param {Object} patch - parciální patch nad `this.proportions`
-     *                        (např. { THIGH: 2.0, UPPER_ARM: 1.5 })
-     */
-    setProportions(patch) {
-        const props = this.proportions;
-        Object.assign(props, patch);
-        // Derived: TORSO_LENGTH se přepočítá pokud se mění některá z půlek
-        if ('LOWER_TORSO' in patch || 'UPPER_TORSO' in patch) {
-            props.TORSO_LENGTH = props.LOWER_TORSO + props.UPPER_TORSO;
-        }
-        // Per-joint localOffset update — přiřazujeme nový objekt (Joint constructor
-        // dělá shallow copy, ale my potřebujeme i mutaci za běhu reflektovanou v meshi)
-        const J = this.joints;
-        J.torso.localOffset     = { x: 0, y: props.LOWER_TORSO, z: 0 };
-        J.neck.localOffset      = { x: 0, y: props.UPPER_TORSO, z: 0 };
-        J.headTop.localOffset   = { x: 0, y: props.HEAD_RADIUS * 2, z: 0 };
-        J.shoulderL.localOffset = { x: -props.SHOULDER_X, y: props.UPPER_TORSO, z: 0 };
-        J.shoulderR.localOffset = { x: +props.SHOULDER_X, y: props.UPPER_TORSO, z: 0 };
-        J.elbowL.localOffset    = { x: 0, y: -props.UPPER_ARM, z: 0 };
-        J.elbowR.localOffset    = { x: 0, y: -props.UPPER_ARM, z: 0 };
-        J.wristL.localOffset    = { x: 0, y: -props.FOREARM, z: 0 };
-        J.wristR.localOffset    = { x: 0, y: -props.FOREARM, z: 0 };
-        J.hipL.localOffset      = { x: -props.HIP_X, y: 0, z: 0 };
-        J.hipR.localOffset      = { x: +props.HIP_X, y: 0, z: 0 };
-        J.kneeL.localOffset     = { x: 0, y: -props.THIGH, z: 0 };
-        J.kneeR.localOffset     = { x: 0, y: -props.THIGH, z: 0 };
-        J.ankleL.localOffset    = { x: 0, y: -props.SHIN, z: 0 };
-        J.ankleR.localOffset    = { x: 0, y: -props.SHIN, z: 0 };
     }
 
     getJoint(name) {
@@ -338,7 +306,7 @@ export class Skeleton {
         Object.values(this.joints).forEach(fn);
     }
 
-    /** Suma DOF napříč klouby — pro Minimal má být 14. */
+    /** Suma DOF napříč klouby — pro Minimal má být 22. */
     get totalDOF() {
         return Object.values(this.joints).reduce((sum, j) => sum + j.dof, 0);
     }
@@ -377,8 +345,9 @@ export class Skeleton {
                 const local = new Mat4().setTranslation(
                     child.localOffset.x, child.localOffset.y, child.localOffset.z
                 );
-                // Order rotací XYZ (stejně jako Three.js Object3D.rotation default)
-                // Pro nás jen X a Z (Y je vždy 0, nemáme twist DOF), ale pro úplnost necháme všechny.
+                // Order rotací XYZ (stejně jako Three.js Object3D.rotation default).
+                // Klouby s méně než 3 DOF mají na neaktivních osách angles = 0,
+                // takže odpovídající R* matice degenerují na identity — na výsledku se neprojeví.
                 RX.setRotationX(child.angles.x * child.signs.x * DEG); local.multiply(RX);
                 RY.setRotationY(child.angles.y * child.signs.y * DEG); local.multiply(RY);
                 RZ.setRotationZ(child.angles.z * child.signs.z * DEG); local.multiply(RZ);
@@ -520,5 +489,3 @@ export class Skeleton {
         return pointInConvexPolygonXZ(com, hull, tol);
     }
 }
-
-// (Geometrie přesunuta do src/util/Geometry.js — single source of truth)

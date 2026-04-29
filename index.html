@@ -43,27 +43,11 @@
     <h2>Dema (ostrý kód)</h2>
     <a href="demos/demo01_inspector.html">
         <strong>Demo 01 — Inspector (statické pózy)</strong>
-        <span>Hlavní playground postavy. 20 propracovaných póz ve 3 sekcích (POSTOJE, SEDY/KLEKY, LEHY) + Reset/Random; slidery všech 19 DOF a root pos/rot s tooltipy a dvojklik-resetem; debug overlay (CoM, gravity arrow, body markery — nos a anáhata) + hover tooltipy nad klouby a kostmi; plynulé přechody mezi pózami (cubic ease-out 0.6 s); Copy JSON. Snap-to-floor a podlaha jsou vždy ON.</span>
+        <span>Hlavní playground postavy. 20 propracovaných póz ve 3 sekcích (POSTOJE, SEDY/KLEKY, LEHY) + Reset/Random; slidery všech 22 DOF a root pos/rot s tooltipy a dvojklik-resetem; debug overlay (CoM, gravity arrow, body markery — nos a anáhata) + hover tooltipy nad klouby a kostmi; plynulé přechody mezi pózami (cubic ease-out 0.6 s); Copy JSON. Snap-to-floor a podlaha jsou vždy ON.</span>
     </a>
     <a href="demos/demo02_stresstest.html">
         <strong>Demo 02 — Stress test (prototyp F2)</strong>
-        <span>První dynamické demo nad nově zavedenou vrstvou <code>src/character/</code> — Stickman wrapper se status atributem a animate(dt). Prototyp implementuje 2 stavy: STAND a WALK (s plnými parametry chůze: tempo, rozkrok, zdvih kolena, twist, vrávorání, swing rukou). F2 fáze postupně přidá SIT, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE.</span>
-    </a>
-    <a href="demos/demo04_animation.html">
-        <strong>Demo 04 — Procedurální animace</strong>
-        <span>Sin/cos cykly v reálném čase: idle, dýchání, mávání, tanec, dřepy.</span>
-    </a>
-    <a href="demos/demo06_stability.html">
-        <strong>Demo 06 — Body opory &amp; stabilita</strong>
-        <span>Podpůrný polygon, indikátor stability (zelený = stabilní, červený = padá).</span>
-    </a>
-    <a href="demos/demo08_lerp.html">
-        <strong>Demo 08 — Pose interpolace</strong>
-        <span>Plynulé přechody mezi pózami (Pose.lerp + smoothstep), nastavitelná doba.</span>
-    </a>
-    <a href="demos/demo09_walk.html">
-        <strong>Demo 09 — Chůze</strong>
-        <span>Cyklický pohyb nohou + ruce v protisměru, support points přepínají v rytmu kroku.</span>
+        <span>Dynamické demo nad vrstvou <code>src/character/</code> — Stickman wrapper se status atributem a animate(dt). Stavy: STAND (s Drift idle režimem), SIT, WALK, RUN (Jog/Sprint presety), LAY, CRAWL (po čtyřech, dog-trot) + Dance preset (drift v rytmu) + Dýchání + Neklid overlay. Zbylé stavy (SWIM, CLIMB, JUMP, SLEEP) v dalších iteracích F2.</span>
     </a>
     <a href="demos/demo10_ik.html">
         <strong>Demo 10 — Inverse Kinematics</strong>
@@ -77,15 +61,6 @@
         <strong>Demo 12 — Šplhání</strong>
         <span>Postava na žebříku, cyklus přemístění 4 končetin, posun root.y nahoru.</span>
     </a>
-    <a href="demos/demo13_ikwalk.html">
-        <strong>Demo 13 — Chůze v0.2 (IK)</strong>
-        <span>Stojná noha drží ankle nehybný (IK), postava se posouvá vpřed jako reálný krok.</span>
-    </a>
-    <a href="demos/demo14_headsupport.html">
-        <strong>Demo 14 — Hlava jako bod opory</strong>
-        <span>Pincha (hlava + lokty) vs. Kapalásana (hlava + dlaně). Tripod stability.</span>
-    </a>
-
     <h2>Scratch (pomocné soubory, mimo architekturu)</h2>
     <a href=".source/stickman.html">
         <strong>Původní prototyp s akváriem</strong>

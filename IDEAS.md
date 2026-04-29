@@ -47,17 +47,19 @@ Aktuálně user vyrobí pose v Inspectoru přes slidery → Copy JSON → AI / m
 
 Rozumné rozšíření. Posunout do TODO až bude pose library větší (= user chce vlastní organizaci).
 
-## Drift — procedural idle motion (budget-based random walk) *(Sezení 7)*
+## ~~Drift — procedural idle motion (budget-based random walk)~~ → DONE *(Sezení 7 spec → Sezení 8 implementace)*
 
-**Kandidát na F2 STAND-idle animace.** Postava ve stoji se neustále mírně hýbe k náhodným cílům — herní standard pro „postava-žije". Liší se od Inspector Random tlačítka tím, že nesází na celý DOF range najednou (Inspector full random + quint ease-out už zachytí 60 % efektu).
+**HOTOVO** v Sezení 8 jako idle režim `animateStand` přes `params.idle = true`. Sekce zachována jako reference spec (3-fázový algoritmus, parametry, edge cases, zamítnuté alternativy) — užitečné pro budoucí varianty Driftu (rytmický Dance preset, Bio/Fyzio episodické akce). Hotová implementace shrnuta v `DONE.md` (Sezení 8) a v sekci „Drift" v `GLOSSARY.md`.
+
+Postava ve stoji se neustále mírně hýbe k náhodným cílům — herní standard pro „postava-žije". Liší se od Inspector Random tlačítka tím, že nesází na celý DOF range najednou (Inspector full random + quint ease-out už zachytí 60 % efektu).
 
 ### Algoritmus (3 fáze)
 
 1. **Generuj cílovou pózu.** Plně uniform random v limitech každé osy (jak to dělá `applyRandom` v Inspectoru). Volitelně: target = nějaký „referenční idle pose" + random offset.
 2. **Distribuuj budget.**
-   - Sestav vektor všech `N` aktivních os (19 DOF + 3 rootRot = 22; rootPos vynechat — snap se postará).
-   - Normalizuj rozsah každé osy na 100 bodů: `pool = N × 100 = 2200 bodů`.
-   - `budget = FRACTION × pool` (parametr, default `FRACTION = 0.25` → 550 bodů).
+   - Sestav vektor všech `N` aktivních os (22 DOF + 3 rootRot = 25; rootPos vynechat — snap se postará).
+   - Normalizuj rozsah každé osy na 100 bodů: `pool = N × 100 = 2500 bodů`.
+   - `budget = FRACTION × pool` (parametr, default `FRACTION = 0.25` → 625 bodů).
    - Iteruj: `pick random axis i` → `consume = min(STEP, |delta_i|, budget)` → posuň `intermediate[i]` o `consume × sign(delta_i)` směrem k targetu → `budget -= consume`.
    - Když `budget <= 0` nebo všechny `delta_i == 0`, stop.
 3. **Animace paralelně.** Spustit `Pose.lerp(current, intermediate)` přes `transitionDuration` (např. 0.8 s) s **expo nebo quint ease-out** (max zrychlení na začátek, velmi pomalý dojezd). Po dokončení znovu fáze 1 → kontinuální drift.
@@ -96,7 +98,7 @@ Rozumné rozšíření. Posunout do TODO až bude pose library větší (= user 
 
 ### Status
 
-**→ DONE (Sezení 8):** Drift implementován v `animateStand` jako idle režim přes `params.idle = true`. Spec dodržena: 22 os v poolu (19 DOF + 3 root pseudo-osy), `fraction = 0.25`, `step = 5`, `cycleDuration = 1.4 s`, quint ease-out per cyklus. Drobná úprava proti spec: root osy mají `rootRange = 90°` (= plný drift, postava se může pomalu naklánět do horizontály) místo původně navrhovaných ±8°. Drobný kontrast: rootRange = 8° se používá pro „Dance preset" (= drift v rytmu, omezený root pro stabilitu).
+**→ DONE (Sezení 8) → REWRITTEN (Sezení 9):** Drift v `animateStand` přes `params.idle = true`. Sezení 8 zavedlo budget-based random walk (point-by-point, step=5). Sezení 9 algoritmus zjednodušilo na **lerp toward random P2**: per cyklus se vygeneruje plně random pose P2, realizuje se `fraction × (P2 - P1)`. Žádné per-axis budget, žádné zamykání. Vizuálně přirozenější — pohyb celé postavy organizovaně, ne fragmentované skoky jednotlivých kloubů. Parametr `fraction` = jemnost driftu (default 0.25 = „čtvrtinový vektor"). `step` parametr odstraněn (obsoletní). Quint ease-out per cyklus zachován.
 
 ## Bio/Fyzio — episodické mikroanimace *(Sezení 8)*
 

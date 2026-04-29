@@ -92,7 +92,7 @@
     <div id="viewport">
         <div id="info">
             <h2>Demo 02 — Stress test</h2>
-            <p>Reset / Dance / Drift / Walk / Jog / Sprint. Neklid = globální overlay přes vše.</p>
+            <p>Reset / Dance / Drift / Walk / Jog / Sprint. Dýchání + Neklid = globální overlay přes vše.</p>
         </div>
     </div>
 
@@ -111,8 +111,10 @@
     import { Stickman }     from '../src/character/Stickman.js';
     import { Status }       from '../src/character/Status.js';
     import { applyNeklid }  from '../src/util/Neklid.js';
+    import { applyBreathing } from '../src/util/Breathing.js';
     import {
-        DEFAULTS_WALK, RUN_PRESETS, DEFAULTS_DRIFT,
+        DEFAULTS_WALK, RUN_PRESETS, DEFAULTS_DRIFT, DEFAULTS_CRAWL,
+        DEFAULTS_PRONE, DEFAULTS_SNEAK,
     } from '../src/character/Animations.js';
 
     // =========================================================================
@@ -152,8 +154,9 @@
     // stickman.time se resetuje při setStatus, ale Neklid musí běžet plynule).
     let globalTime = 0;
 
-    // Neklid level — řízený sliderem v pravém panelu. 0 = no-op.
+    // Overlay levely — řízené slidery v pravém panelu. 0 = no-op.
     let neklidLevel = 0;
+    let breathingLevel = 0;
 
     // =========================================================================
     // 4. Pravý panel — slidery (zatím jen Neklid; další parametry přidáme,
@@ -191,10 +194,20 @@
         parent.appendChild(row);
     }
 
+    // === Dýchání sekce ===
+    // Pomalá sinusoida ~0.25 Hz (= 15 dechů/min) na torso.x + neck.x.
+    // Biologicky koherentní (jeden společný phase, ne nezávislý hash) →
+    // hrudník + hlava se hýbou ve fázi.
+    const breathingGroup = addGroup('Dýchání');
+    addSlider(breathingGroup, 'Intenzita', 0, 10, 0.5, 0,
+        (v) => { breathingLevel = v; },
+    );
+
     // === Neklid sekce ===
-    // 0 = no-op, 10 = max výchylka (~5° per kloub, ~4° root). Aplikuje se
+    // 0 = no-op, 10 = max výchylka (~5° per kloub) na vrchu těla. Aplikuje se
     // PO Stickman.animate v render loopu — funguje pro VŠECHNY režimy
-    // (Walk, Sprint, Drift, Reset, …).
+    // (Walk, Sprint, Drift, Reset, …). Dolní polovina + rootRotation
+    // se nehýbou (Sezení 9 fix).
     const neklidGroup = addGroup('Neklid');
     addSlider(neklidGroup, 'Intenzita', 0, 10, 0.5, 0,
         (v) => { neklidLevel = v; },
@@ -247,13 +260,19 @@
     addBtn(posesContainer, 'drift', 'Drift',
         () => stickman.setStatus(Status.STAND, { ...DEFAULTS_DRIFT }));
 
-    // === STATUS: Walk, Jog, Sprint ===
+    // === STATUS: Walk, Jog, Sprint, Po čtyřech ===
     addBtn(statusContainer, 'walk', 'Walk',
         () => stickman.setStatus(Status.WALK, { ...DEFAULTS_WALK }));
     addBtn(statusContainer, 'jog', 'Jog',
         () => stickman.setStatus(Status.RUN, { ...RUN_PRESETS.jog }));
     addBtn(statusContainer, 'sprint', 'Sprint',
         () => stickman.setStatus(Status.RUN, { ...RUN_PRESETS.sprint }));
+    addBtn(statusContainer, 'crawl', 'Po čtyřech',
+        () => stickman.setStatus(Status.CRAWL, { ...DEFAULTS_CRAWL }));
+    addBtn(statusContainer, 'prone', 'Plížení',
+        () => stickman.setStatus(Status.PRONE, { ...DEFAULTS_PRONE }));
+    addBtn(statusContainer, 'sneak', 'Přikrčená chůze',
+        () => stickman.setStatus(Status.SNEAK, { ...DEFAULTS_SNEAK }));
 
     buttons.reset.classList.add('active');
 
@@ -266,9 +285,10 @@
 
     scene.onUpdate((dt) => {
         globalTime += dt;
-        stickman.animate(dt);                      // 1. primární animace
-        applyNeklid(skel, globalTime, neklidLevel); // 2. globální overlay
-        skel.snapToFloor(FLOOR_Y);                  // 3. drž na podlaze
+        stickman.animate(dt);                              // 1. primární animace
+        applyBreathing(skel, globalTime, breathingLevel);  // 2a. dýchání overlay (torso.x + neck.x)
+        applyNeklid(skel, globalTime, neklidLevel);        // 2b. fidget overlay (vrch těla)
+        skel.snapToFloor(FLOOR_Y);                         // 3. drž na podlaze
         view.update();
         debug.update();
     });

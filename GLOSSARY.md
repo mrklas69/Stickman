@@ -26,7 +26,7 @@ pelvis (root, 0 DOF)
 └── hipR (3: x, y, z) ── kneeR (1: x) ── ankleR (0)
 ```
 
-Suma DOF = **19** (přístup `skeleton.totalDOF`).
+Suma DOF = **22** (přístup `skeleton.totalDOF`).
 
 ### Klouby (joints)
 
@@ -72,7 +72,7 @@ Stav kostry, kdy všechny `joint.angles` jsou 0: postava stojí svisle, ruce vis
 
 Funkce `buildProportions(H)` v `Skeleton.js` vrací všechny délky kostí, poloměry kloubů a hmotnosti relativně k výšce postavy `H`. Inspirace Vitruviem (≈ 8 hlav). Změna proporcí = jediný zdroj pravdy: editovat `buildProportions`, neměnit číslo na dvou místech.
 
-Po Sezení 6 byla v Inspectoru sekce „Proporce" s 6 multiplier slidery pro live ladění (přes `Skeleton.setProportions` + `StickmanView.rebuildBones`). V Sezení 7 jsme našli sweet spot a zafixovali do default (biceps × 0.95, předloktí × 0.95, stehno × 1.05, lýtko × 1.05); slidery i komentáře v Inspectoru byly odstraněny. API `setProportions` / `rebuildBones` zůstává pro případnou budoucí potřebu.
+Po Sezení 6 byla v Inspectoru sekce „Proporce" s 6 multiplier slidery pro live ladění (přes API `Skeleton.setProportions` + `StickmanView.rebuildBones`). V Sezení 7 jsme našli sweet spot a zafixovali do default (biceps × 0.95, předloktí × 0.95, stehno × 1.05, lýtko × 1.05); slidery i komentáře v Inspectoru byly odstraněny. V Sezení 9 i samotná API smazána (žádný caller, KISS). Změna proporcí = editace `buildProportions` + reload.
 
 ---
 
@@ -165,7 +165,7 @@ Pozor: po snapu jsou cached worldPositions zastaralé — zavolat `computeWorldT
 
 ### Pose
 
-Snapshot stavu kostry: úhly všech aktivních os + `rootPosition` + `rootRotation` + `supportPoints`. `src/model/Pose.js`. Bez závislosti na Three.js (čistá data + matematika).
+Snapshot stavu kostry: úhly všech aktivních os + `rootPosition` + `rootRotation`. `src/model/Pose.js`. Bez závislosti na Three.js (čistá data + matematika). Body opory NEJSOU součástí pózy — počítají se dynamicky z geometrie přes `Skeleton.getSupportPoints`.
 
 API:
 
@@ -181,30 +181,38 @@ Lineární interpolace mezi dvěma pózami pro `t ∈ [0,1]`:
 
 - **Úhly**: lerp per-osa. Pokud jedna póza osu neuvádí, hodnota = 0 (rest pose).
 - **rootPosition / rootRotation**: lineární interpolace.
-- **supportPoints**: **DISKRÉTNÍ skok v půli** (`t < 0.5 ? a : b`) — body opory jsou množina, nelze plynule interpolovat mezi `['ankleL','ankleR']` a `['wristL','wristR']`.
+
+Body opory se neinterpolují, protože nejsou součástí Pose; aktuální contact joints určuje `Skeleton.getSupportPoints` z geometrie kostry po aplikaci úhlů.
 
 ### Pose library
 
-`src/library/Poses.js` — single source of truth pro pojmenované pózy. Organizované do exportovaných sad podle UI sekce v Inspectoru:
+`src/library/Poses.js` — single source of truth pro pojmenované pózy. Organizované do exportovaných sad podle UI sekce v Inspectoru a podle účelu pro ostatní dema:
 
-- **`STANCE_POSES`** (POSTOJE): `stand`, `tpose`, `wave`, `squat`
+**Inspector sekce** (po Sezení 7 — authored pose):
+- **`STANCE_POSES`** (POSTOJE): `arabesque`, `stretch`, `bow`, `crow`, `bridge`, `headstand` (yoga progression: stoje → balanc → záklon → inverze)
 - **`SIT_POSES`** (SEDY/KLEKY): `sit`, `sitCross`, `sitLegsForward`, `sitTuck`, `sitKneel`, `sitChild`, `cat`, `sitSide`
 - **`LIE_POSES`** (LEHY): `layBack`, `layStarfish`, `layChill`, `laySide`, `layReader`, `layRecline`
-- **Ostatní** (= ne v žádné sadě): `oneLegL/R`, `lunge`, `leanForward`, `kapalasana`, `pincha`
+
+**Sady pro stará dema** (= primitivní pose, mimo Inspector):
+- **`BASIC_POSES`** (sada primitivních pose, aktuálně bez aktivního konzumenta): `stand`, `tpose`, `wave`, `sit`, `squat`
+- **`BALANCE_POSES`** (sada pro stability test, aktuálně bez aktivního konzumenta): `stand`, `tpose`, `wave`, `leanForward`, `oneLegL`, `oneLegR`, `lunge`
+- **`HEAD_SUPPORT_POSES`** (vzhůru-nohama tripody, aktuálně bez aktivního konzumenta): `kapalasana`, `pincha`
+
+Primitivní pose (`stand`, `tpose`, `wave`, `squat`, `oneLegL/R`, `lunge`, `leanForward`, `kapalasana`, `pincha`) jsou exportované samostatně, ale v sekcích Inspectoru se neukáží (= nejsou v `STANCE_POSES`/`SIT_POSES`/`LIE_POSES`).
 
 **Pravidlo:** pózy se definují jen v `library/Poses.js`. Dema je nedefinují znovu — importují.
 
 ### Status *(F2 prototyp — Sezení 5)*
 
-Enum stavu postavy v `src/character/Status.js`: `STAND`, `SIT`, `WALK`, `RUN`, `SWIM`, `CLIMB`, `JUMP`, `LAY`, `SLEEP`, `DANCE`. `Object.freeze`d (= zamrazený). Hodnoty jsou stringy (lepší debug + serializace). Atribut na `Stickman`, ne `Skeleton`.
+Enum stavu postavy v `src/character/Status.js`: `STAND`, `SIT`, `WALK`, `RUN`, `SWIM`, `CLIMB`, `JUMP`, `LAY`, `SLEEP`, `DANCE`, `CRAWL`, `PRONE`, `SNEAK`. `Object.freeze`d (= zamrazený). Hodnoty jsou stringy (lepší debug + serializace). Atribut na `Stickman`, ne `Skeleton`.
 
-Stavy bez registrované animace v `ANIMATIONS` mapě se chovají jako no-op (postava zůstane v poslední pose) — záměrné, ať Stickman nepadá na neimplementovaných stavech. Aktuálně implementované: STAND (s idle/Drift režimem), SIT, WALK, RUN (Jog/Sprint presety), LAY. DANCE NENÍ samostatná animace = preset přes STAND idle (viz níže).
+Stavy bez registrované animace v `ANIMATIONS` mapě se chovají jako no-op (postava zůstane v poslední pose) — záměrné, ať Stickman nepadá na neimplementovaných stavech. Aktuálně implementované: STAND (s idle/Drift režimem), SIT, WALK, RUN (Jog/Sprint presety), LAY, CRAWL (po čtyřech, dog-trot), PRONE (plížení / commando crawl), SNEAK (přikrčená chůze). DANCE NENÍ samostatná animace = preset přes STAND idle (viz níže).
 
 ### Animations / Animate *(F2 prototyp — Sezení 5, rozšířeno v 8)*
 
 `src/character/Animations.js` — registr `Status → fn(skeleton, time, params)`. Funkce mutuje skeleton (volá `setAngle`, `rootPosition`, …), nemá return value.
 
-Defaulty parametrů exportované jako `DEFAULTS_WALK`, `RUN_PRESETS.jog/sprint`, `DEFAULTS_DRIFT` — single source pro slidery / setStatus calls. Demo si při `setStatus()` může předat patch (např. `{ tempo: 1.5 }`), zbytek zdědí z defaults.
+Defaulty parametrů exportované jako `DEFAULTS_WALK`, `RUN_PRESETS.jog/sprint`, `DEFAULTS_DRIFT`, `DEFAULTS_CRAWL`, `DEFAULTS_PRONE`, `DEFAULTS_SNEAK` — single source pro slidery / setStatus calls. Demo si při `setStatus()` může předat patch (např. `{ tempo: 1.5 }`), zbytek zdědí z defaults.
 
 Metoda `stickman.animate(dt)` — posune `Stickman.time` o `dt` a zavolá registrovanou funkci. Animace mohou být:
 
@@ -212,19 +220,18 @@ Metoda `stickman.animate(dt)` — posune `Stickman.time` o `dt` a zavolá regist
 - **Procedurální cyklické** (WALK, RUN): `time → angles` mapping. **Konvence: musí volat `skeleton.reset()` na začátku** — bez něj by úhly z předchozí animace (typicky Drift, který nastaví všech 22 os) přetrvávaly v ne-přepsaných osách napořád.
 - **Stavové procedurální** (STAND idle / Drift): drží `params._drift = { from, target, cycleStart, cycleDuration, fraction, ... }` (lazy init při prvním volání). Random walk k cíli; po dorazu nový cíl.
 
-### Drift *(Sezení 8)*
+### Drift *(Sezení 8, přepsáno v Sezení 9)*
 
-Idle režim STAND zapnutý přes `params.idle = true`. Algoritmus = budget-based random walk (spec původně v IDEAS.md):
+Idle režim STAND zapnutý přes `params.idle = true`. Algoritmus = **lerp toward random P2** (jednodušší a vizuálně přirozenější než původní budget-based random walk):
 
-1. Sestav vektor 22 os (19 DOF + 3 root pseudo-osy s `rootRange = 90°`)
-2. Pool = N × 100 bodů; budget = `fraction × pool`
-3. Generuj plně random target per osu (uniform v limits)
-4. Iteruj: pick random axis → consume = `min(STEP, |delta|, budget)` → posuň `intermediate[i]` o `consume × sign(delta)` → `budget -= consume`
-5. Po dorazu (`time - cycleStart >= cycleDuration`) nový target generován od aktuálního `target` (= `from = previous target`)
+1. Sestav vektor N aktivních os (22 DOF + 3 root pseudo-osy s `rootRange = 90°` = 25 os).
+2. Pro každou osu vygeneruj `P2_i` = uniform random v `[min, max]`.
+3. Realizuj jen `fraction × (P2 - P1)` (= zlomek vektoru). `target_i = current_i + fraction × (P2_i - current_i)`. **Žádné zamykání os, žádný point-budget.** Všechny osy se hýbou každý cyklus, ale jen o malou část — pohyb je organizovaný (drobné posuny celého těla).
+4. Po dorazu (`time - cycleStart >= cycleDuration`) `from = target`; nový target = lerp z aktuálního stavu k novému P2.
 
-`DEFAULTS_DRIFT`: `fraction = 0.25`, `cycleDuration = 1.4 s`, `step = 5`, `rootRange = 90°`.
+`DEFAULTS_DRIFT`: `fraction = 0.25` (= „čtvrtinový vektor", **jemnost driftu**), `cycleDuration = 1.4 s`, `rootRange = 90°`.
 
-Interpolace per cyklus = `Pose.lerp(from, target, eased)` s **quint ease-out** (`1 - (1-t)⁵`) — rychlý start, velmi pomalý dojezd → „intent" pocit.
+Interpolace v rámci cyklu = `Pose.lerp(from, target, eased)` s **quint ease-out** (`1 - (1-t)⁵`) — rychlý start, velmi pomalý dojezd → „intent" pocit.
 
 ### Dance preset *(Sezení 8)*
 
@@ -262,8 +269,6 @@ Implementace `src/util/Neklid.js`:
 - Fungue pro VŠECHNY režimy (Walk, Sprint, Drift, Reset, Sit, Lay) — nezávislé na Status.
 
 **Žádný kumulativní bug:** Stickman.animate volá `skeleton.reset()` každý frame (přes pose.apply nebo explicitně v procedurálních animacích); Neklid přidá noise nad čerstvou primárku. Frame N+1 reset smaže předchozí noise.
-
-### Stickman *(F2 prototyp — Sezení 5)*
 
 ### Stickman *(F2 prototyp — Sezení 5)*
 
@@ -316,7 +321,7 @@ demos/          DEMO HTML — každé demo = samostatná stránka
 
 ### Naming dem
 
-Krátké slovo nebo zkratka po `demoNN_`: `demo04_animation`, `demo10_ik`, `demo13_ikwalk`. Přesný popis je v `<title>` a `<h2>` HTML stránky.
+Krátké slovo nebo zkratka po `demoNN_`: `demo01_inspector`, `demo02_stresstest`, `demo10_ik`. Přesný popis je v `<title>` a `<h2>` HTML stránky.
 
 Po dokončení F3 budou 3 finální dema:
 
@@ -326,9 +331,12 @@ Po dokončení F3 budou 3 finální dema:
 
 Renumber se odkládá až po F3.
 
-### Crash test markery *(F1)*
+### Body markery *(F1, Sezení 6)*
 
-Žluto-černé soustředné disky na povrchu hlavy — front (`−Z`), side-L (`−X`), side-R (`+X`). Pomáhají rozpoznat rotaci sférické hlavy. Implementace **geometricky** (3 disky `CircleGeometry` × 3 vrstvy: žlutý vnější, černý prostřední, žlutý vnitřní), **žádná textura**.
+Zlaté polokoule jako orientační body. Pomáhají rozpoznat orientaci sférické hlavy a sférického trupu (z dálky symetrické). Implementace v `DebugView._makeBodyMarkers` (`SphereGeometry` s `thetaLength = π/2` → severní polokoule, vyklenutí míří ven, ⅔ poloměru zapuštěné do těla).
+
+- **Nos** — na povrchu hlavy směrem `−Z` (kupředu pro postavu).
+- **Anáhata** — srdeční čakra v hatha yoga, uprostřed hrudi (50 % `UPPER_TORSO`), směrem `−Z`.
 
 ### DOF tooltip *(F1)*
 

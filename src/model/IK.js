@@ -30,6 +30,9 @@
 
 const RAD_TO_DEG = 180 / Math.PI;
 
+// Stav pro warn-once: IK volaný na pootočené kostře (viz solveTwoBoneIK)
+let _ikWarned = false;
+
 /**
  * Vyřeší 2-bone IK a nastaví úhly v rootJ a midJ.
  *
@@ -53,10 +56,10 @@ export function solveTwoBoneIK(skeleton, rootName, midName, endName, targetWorld
     const torsoTwisted = torso && (torso.angles.x !== 0 || torso.angles.y !== 0 || torso.angles.z !== 0);
     const rootTwisted  = rr.x !== 0 || rr.y !== 0 || rr.z !== 0;
     const isArm = rootName === 'shoulderL' || rootName === 'shoulderR';
-    if ((rootTwisted || (isArm && torsoTwisted)) && !solveTwoBoneIK._warned) {
+    if ((rootTwisted || (isArm && torsoTwisted)) && !_ikWarned) {
         console.warn('IK.solveTwoBoneIK: kostra je pootočená (rootRotation nebo torso ≠ 0). ' +
                      'Výsledek bude nepřesný — IK předpokládá identity rotaci nadřazených kloubů.');
-        solveTwoBoneIK._warned = true;
+        _ikWarned = true;
     }
 
     const rootJ = skeleton.getJoint(rootName);

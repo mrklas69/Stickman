@@ -1,10 +1,7 @@
 // src/util/Geometry.js
 // =============================================================================
-// 2D geometrické helpery v rovině XZ. Jediný zdroj pravdy pro:
-//   - distXZ(a, b)                       — euklidovská vzdálenost (Y se ignoruje)
-//   - distPointToSegmentXZ(p, a, b)      — vzdálenost bodu od úsečky
-//   - convexHullXZ(points)               — Andrew's monotone chain, O(n log n), CCW
-//   - pointInConvexPolygonXZ(p, poly, tol) — point-in-convex-polygon s tolerancí
+// 2D geometrické helpery v rovině XZ. Jediný zdroj pravdy pro vzdálenosti,
+// convex hull a point-in-polygon testy nad množinami bodů opory a CoM.
 //
 // Vstup: objekty se složkami {x, z, ...} (Y je ignorováno; lze předat 3D body
 // se složkou y — funkce ji prostě nepoužije).

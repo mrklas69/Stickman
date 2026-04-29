@@ -43,7 +43,10 @@ export class Stickman {
     constructor(skeleton, status = Status.STAND, params = {}) {
         this.skeleton = skeleton;
         this.status = status;
-        this.params = params;
+        // Shallow-copy: animace mutují params (Drift drží lazy `params._drift` state).
+        // Bez kopie by N instancí Stickmana sdílejících jeden patch literál
+        // (akvárium F3) sdílelo i drift state → vzájemná kontaminace.
+        this.params = { ...params };
         // Čas od posledního setStatus() v sekundách. Reset při přepnutí stavu,
         // aby cyklické animace začaly od fáze 0 (= konzistentní start).
         this.time = 0;
@@ -78,7 +81,7 @@ export class Stickman {
         this.transitionElapsed = 0;
 
         this.status = status;
-        this.params = params;
+        this.params = { ...params };       // viz konstruktor — drift state per instance
         this.time = 0;
     }
 

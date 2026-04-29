@@ -374,7 +374,7 @@ export const lunge = makePose('Krok dopředu', {
  *
  * Demo musí nastavit `rootRotation.x = 180` PO `pose.apply()` a `rootPosition.y`
  * tak, aby hlava sedla na podlahu (snapToFloor by srovnal nejnižší support pivot,
- * ne hlavu — viz demo14_headsupport).
+ * ne hlavu).
  *
  * Body opory: temeno hlavy + obě zápěstí.
  */
