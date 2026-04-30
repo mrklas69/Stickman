@@ -110,11 +110,14 @@
     import { BasicScene }   from '../src/scene/BasicScene.js';
     import { Stickman }     from '../src/character/Stickman.js';
     import { Status }       from '../src/character/Status.js';
-    import { applyNeklid }  from '../src/util/Neklid.js';
+    import { applyFidget }  from '../src/util/Fidget.js';
     import { applyBreathing } from '../src/util/Breathing.js';
     import {
+        applyGestures, triggerGesture, createGestureState, GESTURES,
+    } from '../src/character/Gestures.js';
+    import {
         DEFAULTS_WALK, RUN_PRESETS, DEFAULTS_DRIFT, DEFAULTS_CRAWL,
-        DEFAULTS_PRONE, DEFAULTS_SNEAK,
+        DEFAULTS_PRONE, DEFAULTS_SNEAK, JUMP_PRESETS,
     } from '../src/character/Animations.js';
 
     // =========================================================================
@@ -155,8 +158,37 @@
     let globalTime = 0;
 
     // Overlay levely — řízené slidery v pravém panelu. 0 = no-op.
-    let neklidLevel = 0;
+    let fidgetLevel = 0;
     let breathingLevel = 0;
+
+    // Bio/Fyzio: Poisson rate (gest/s) + per-Stickman state scheduleru.
+    let bioLambda = 0;
+    const gestureState = createGestureState();
+
+    // World position — akumulovaný posun „treadmill stylem". Postava zůstává
+    // centrovaná v origin (kamera + debug markery jednoduché); místo postavy
+    // se posouvá TEXTURA podlahy v opačném směru. Texture repeat = nekonečný
+    // pattern, žádný okraj nehrozí. Postava se „dívá" -Z → forwardSpeed > 0
+    // klesá worldPos.z. Reset přes tlačítko Domů.
+    const worldPos = { x: 0, z: 0 };
+    const TILE_SIZE = 2;        // jednotky/tile (sync s BasicScene checker repeat)
+
+    // Support tracking — algoritmus pro přímočarý rovnoměrný pohyb (v = konst):
+    //   1. Každý frame zjisti všechny opěrné body (joints na minY ± tol).
+    //   2. Pro každý drž počítadlo „kolik frames jsem byl už support".
+    //   3. Pick support s NEJDELŠÍ historií = nejjistější planted (true stance
+    //      noha). Vyhne se chybnému výběru swing nohy, která dočasně padla
+    //      do tolerance v pozdní swing fázi (jiný směr velocity!).
+    //
+    // U přikrčené chůze knees deeply bent → swing noha drží vysoko a do
+    // tolerance nikdy nevejde → algoritmus by tam i s naivní max |v| metodou
+    // fungoval. Walk/Run/Crawl/Prone má swing nohy klesající do tolerance
+    // v pozdním swingu → potřebuje history-based selection.
+    //
+    // Když žádný support nemá history ≥ 2: extrapoluj z poslední velocity.
+    let prevSupports = new Map();    // name → world.z (z prev frame)
+    let supportHistory = new Map();  // name → consecutive frame count
+    let lastBodyDz = 0;
 
     // =========================================================================
     // 4. Pravý panel — slidery (zatím jen Neklid; další parametry přidáme,
@@ -203,15 +235,37 @@
         (v) => { breathingLevel = v; },
     );
 
-    // === Neklid sekce ===
+    // === Neklid sekce (Fidget overlay) ===
     // 0 = no-op, 10 = max výchylka (~5° per kloub) na vrchu těla. Aplikuje se
     // PO Stickman.animate v render loopu — funguje pro VŠECHNY režimy
     // (Walk, Sprint, Drift, Reset, …). Dolní polovina + rootRotation
     // se nehýbou (Sezení 9 fix).
-    const neklidGroup = addGroup('Neklid');
-    addSlider(neklidGroup, 'Intenzita', 0, 10, 0.5, 0,
-        (v) => { neklidLevel = v; },
+    const fidgetGroup = addGroup('Neklid');
+    addSlider(fidgetGroup, 'Intenzita', 0, 10, 0.5, 0,
+        (v) => { fidgetLevel = v; },
     );
+
+    // === Bio/Fyzio sekce ===
+    // Poisson scheduler diskrétních gest. Aktivita = λ (gest/s) — 0.1 ≈ jedno
+    // gesto za 10 s, 0.5 ≈ jedno za 2 s. Spouští se JEN v klidu (STAND idle =
+    // Drift/Dance, nebo SIT). Manuální trigger bypassuje Poisson + isResting.
+    const bioGroup = addGroup('Bio/Fyzio');
+    addSlider(bioGroup, 'Aktivita', 0, 0.5, 0.05, 0,
+        (v) => { bioLambda = v; },
+    );
+
+    // Manuální spouštění jednotlivých gest (test). Tlačítko stylem pose-btn
+    // pro vizuální konzistenci s levým panelem.
+    for (const key of Object.keys(GESTURES)) {
+        const btn = document.createElement('button');
+        btn.className = 'pose-btn';
+        btn.textContent = `▶ ${key}`;
+        btn.style.marginTop = '4px';
+        btn.addEventListener('click', () => {
+            triggerGesture(stickman, globalTime, gestureState, key);
+        });
+        bioGroup.appendChild(btn);
+    }
 
     // =========================================================================
     // 5. Levý panel — tlačítka (stejný layout jako demo01)
@@ -273,6 +327,12 @@
         () => stickman.setStatus(Status.PRONE, { ...DEFAULTS_PRONE }));
     addBtn(statusContainer, 'sneak', 'Přikrčená chůze',
         () => stickman.setStatus(Status.SNEAK, { ...DEFAULTS_SNEAK }));
+    addBtn(statusContainer, 'jumpV', 'Skok nahoru',
+        () => stickman.setStatus(Status.JUMP, { ...JUMP_PRESETS.vertical }));
+    addBtn(statusContainer, 'jumpL', 'Žabák',
+        () => stickman.setStatus(Status.JUMP, { ...JUMP_PRESETS.long }));
+    addBtn(statusContainer, 'jumpR', 'Skok v běhu',
+        () => stickman.setStatus(Status.JUMP, { ...JUMP_PRESETS.running }));
 
     buttons.reset.classList.add('active');
 
@@ -285,10 +345,75 @@
 
     scene.onUpdate((dt) => {
         globalTime += dt;
-        stickman.animate(dt);                              // 1. primární animace
-        applyBreathing(skel, globalTime, breathingLevel);  // 2a. dýchání overlay (torso.x + neck.x)
-        applyNeklid(skel, globalTime, neklidLevel);        // 2b. fidget overlay (vrch těla)
-        skel.snapToFloor(FLOOR_Y);                         // 3. drž na podlaze
+        stickman.animate(dt);                                                  // 1.  primární animace
+        applyBreathing(skel, globalTime, breathingLevel);                      // 2a. dýchání overlay (torso.x + neck.x)
+        applyGestures(skel, globalTime, gestureState, bioLambda, stickman);    // 2b. Bio/Fyzio overlay (přepíše paže/...)
+        applyFidget(skel, globalTime, fidgetLevel);                            // 2c. fidget overlay (jemné chvění i přes gesto)
+        // Snap-to-floor: skip během AIR fáze JUMP (animace nastavila rootPosition.y
+        // na parabolický arc, snap by ji vrátil na podlahu = postava by „neletěla").
+        if (!stickman.params._airborne) skel.snapToFloor(FLOOR_Y);             // 3.  drž na podlaze
+
+        // 4. Treadmill — postava centrovaná, posouváme texturu podlahy v opač-
+        //    ném směru k rychlosti pohybu. Dva režimy:
+        //      (a) JUMP s `params.forwardSpeed` = explicit override (skok není
+        //          stance-cyklus, foot tracking by neřekl pravdu).
+        //      (b) Default = foot tracking: planted noha (lower Y) v body frame
+        //          jede dozadu rychlostí body forward → její Z delta je přesně
+        //          rychlost těla = rychlost posunu podlahy.
+        if (stickman.params.forwardSpeed !== undefined) {
+            worldPos.z -= stickman.params.forwardSpeed * dt;
+            prevSupports.clear();
+            supportHistory.clear();
+            lastBodyDz = 0;
+        } else {
+            // Sebrání všech opěrných bodů = joints s Y blízko nejnižšího.
+            const SUPPORT_TOL = skel.H * 0.04;
+            skel.computeWorldTransforms();
+            let minY = Infinity;
+            for (const j of Object.values(skel.joints)) {
+                if (j.worldPosition.y < minY) minY = j.worldPosition.y;
+            }
+
+            // Aktuální supports + update history counters. Pick support
+            // s NEJDELŠÍ history (= true planted, nejjistější body-translation
+            // indikátor). Walk: planted noha drží high history, swing krátký
+            // dip do tolerance má jen 1-2 frames history → ignored.
+            // (Plížení tento výběr selhává — PASSIVE leg drží history navždy
+            // s |dz|≈0; viz odložené.)
+            const currentSupports = new Map();
+            const newHistory = new Map();
+            let bestName = null;
+            let bestHistory = 1;       // ≥2 = vyžadujeme aspoň jeden prev frame
+            for (const j of Object.values(skel.joints)) {
+                if (j.worldPosition.y > minY + SUPPORT_TOL) continue;
+                const z = j.worldPosition.z;
+                currentSupports.set(j.name, z);
+                const hist = (supportHistory.get(j.name) ?? 0) + 1;
+                newHistory.set(j.name, hist);
+                if (hist > bestHistory) {
+                    bestHistory = hist;
+                    bestName = j.name;
+                }
+            }
+
+            if (bestName !== null) {
+                const dz = currentSupports.get(bestName) - prevSupports.get(bestName);
+                worldPos.z -= dz;
+                lastBodyDz = dz;
+            } else {
+                // Žádný support s history ≥ 2 → extrapoluj.
+                worldPos.z -= lastBodyDz;
+            }
+            prevSupports = currentSupports;
+            supportHistory = newHistory;
+        }
+        if (scene.floor) {
+            scene.floor.material.map.offset.set(
+                 worldPos.x / TILE_SIZE,
+                -worldPos.z / TILE_SIZE,
+            );
+        }
+
         view.update();
         debug.update();
     });

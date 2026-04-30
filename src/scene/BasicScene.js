@@ -69,30 +69,34 @@ export class BasicScene {
         dir.position.set(-8, 14, -12);
         if (shadows) {
             dir.castShadow = true;
-            // Shadow camera bounds — co bude ve stínu zachyceno
-            dir.shadow.camera.left   = -12;
-            dir.shadow.camera.right  =  12;
-            dir.shadow.camera.top    =  12;
-            dir.shadow.camera.bottom = -12;
+            // Shadow camera bounds — co bude ve stínu zachyceno. Velký rozsah
+            // protože postava může v demo02 chodit po šachovnici daleko od origin.
+            dir.shadow.camera.left   = -30;
+            dir.shadow.camera.right  =  30;
+            dir.shadow.camera.top    =  30;
+            dir.shadow.camera.bottom = -30;
             dir.shadow.camera.near   = 0.5;
-            dir.shadow.camera.far    = 50;
-            dir.shadow.mapSize.set(1024, 1024);
-            dir.shadow.bias = -0.001;          // potlačí "shadow acne" na vzdálených plochách
+            dir.shadow.camera.far    = 80;
+            dir.shadow.mapSize.set(2048, 2048);   // vyšší rezoluce pro větší bounds
+            dir.shadow.bias = -0.001;             // potlačí "shadow acne" na vzdálených plochách
         }
         this.scene.add(dir);
         this.shadows = shadows;
 
         // === Volitelná podlaha ===
-        // Pokud floorY je číslo, vyrobíme tmavý plane v této výšce, který stíny PŘIJÍMÁ.
+        // Šachovnice + 33% průhlednost. Dlaždice 2 j světové = vizuální měřítko
+        // pro pohyby (uživatel vidí, jestli postava translatuje nebo skáče
+        // na místě). NearestFilter = ostré hrany (žádný blur na vzdálených
+        // dlaždicích).
         if (floorY !== null) {
-            // 33% průhlednost (= 67% opacity) — dostatečně viditelná podlaha,
-            // ale support polygon a další overlay vrstvy pod ní lehce prosvítají.
+            const tex = makeCheckerTexture();
+            tex.repeat.set(40, 40);                    // 80 j plane / 2 j dlaždice
             const floorMat = new THREE.MeshStandardMaterial({
-                color: 0x2a2a30, roughness: 0.9, metalness: 0.0,
+                map: tex, roughness: 0.9, metalness: 0.0,
                 transparent: true, opacity: 0.67,
             });
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), floorMat);
-            floor.rotation.x = -Math.PI / 2;        // do horizontální roviny
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), floorMat);
+            floor.rotation.x = -Math.PI / 2;
             floor.position.y = floorY;
             if (shadows) floor.receiveShadow = true;
             this.scene.add(floor);
@@ -152,4 +156,26 @@ export class BasicScene {
         // spuštění by sáhlo na proměnnou v Temporal Dead Zone a callback by spadl.
         requestAnimationFrame(loop);
     }
+}
+
+/**
+ * Vyrobí šachovnicovou texturu (2×2 šedé dlaždice) přes Canvas. Nastaví
+ * RepeatWrapping + NearestFilter (= ostré hrany dlaždic, žádný blur ani
+ * zubaté šikmé linie z bilineárního filtru).
+ */
+function makeCheckerTexture(size = 64) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const half = size / 2;
+    ctx.fillStyle = '#3a3a44';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#22222a';
+    ctx.fillRect(0,    0,    half, half);
+    ctx.fillRect(half, half, half, half);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    return tex;
 }

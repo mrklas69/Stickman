@@ -32,16 +32,18 @@ src/scene/      SCÉNA — společné prostředí
 src/util/       UTILITY — bez Three.js, čisté funkce
   Geometry.js       — distXZ, distPointToSegmentXZ, convexHullXZ, pointInConvexPolygonXZ
   DemoUI.js         — addSlider, addToggle, addButtonGroup, injectStyles
-  Neklid.js         — applyNeklid (globální overlay drobných oscilací nad primárkou)
+  Fidget.js         — applyFidget (globální overlay drobných oscilací; doménový pojem „Neklid")
+  Breathing.js      — applyBreathing (overlay dýchání ~0.25 Hz na torso.x + neck.x)
   Palette.js        — PAL barvy (CoM, support, gravity, body markery, …)
 
 src/library/    KNIHOVNA POSE — definované jednou, importované všude
   Poses.js          — STANCE_POSES / SIT_POSES / LIE_POSES (Inspector) + BASIC/BALANCE/HEAD_SUPPORT pro stará dema
 
-src/character/  CHARACTER — wrapper Stickman + Status + Animations
-  Status.js         — enum (STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE)
-  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK / RUN_PRESETS / DEFAULTS_DRIFT
+src/character/  CHARACTER — wrapper Stickman + Status + Animations + Gestures
+  Status.js         — enum (STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE, CRAWL, PRONE, SNEAK)
+  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK / RUN_PRESETS / DEFAULTS_DRIFT / JUMP_PRESETS / DEFAULTS_CRAWL/PRONE/SNEAK
   Stickman.js       — wrapper { skeleton, status, time, params, transitionDuration, … }, setStatus, animate(dt) s plynulými přechody
+  Gestures.js       — Bio/Fyzio overlay s Poisson scheduler; 7 gest s pose-based keyframes + root delta
 
 demos/          DEMO HTML — každé demo je samostatná stránka
 .source/        SCRATCH — vyřazené prototypy (mimo architekturu)

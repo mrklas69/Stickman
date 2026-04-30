@@ -100,9 +100,13 @@ Postava ve stoji se neustále mírně hýbe k náhodným cílům — herní stan
 
 **→ DONE (Sezení 8) → REWRITTEN (Sezení 9):** Drift v `animateStand` přes `params.idle = true`. Sezení 8 zavedlo budget-based random walk (point-by-point, step=5). Sezení 9 algoritmus zjednodušilo na **lerp toward random P2**: per cyklus se vygeneruje plně random pose P2, realizuje se `fraction × (P2 - P1)`. Žádné per-axis budget, žádné zamykání. Vizuálně přirozenější — pohyb celé postavy organizovaně, ne fragmentované skoky jednotlivých kloubů. Parametr `fraction` = jemnost driftu (default 0.25 = „čtvrtinový vektor"). `step` parametr odstraněn (obsoletní). Quint ease-out per cyklus zachován.
 
-## Bio/Fyzio — episodické mikroanimace *(Sezení 8)*
+## ~~Bio/Fyzio — episodické mikroanimace~~ → DONE *(Sezení 8 spec → Sezení 10 implementace)*
 
-**Kandidát na F2.x.** Když postava stojí v idle (Drift / Stand), občas (každých N sekund) se „zachová lidsky" — podrbe, prohrábne si vlasy, založí ruce, přešlápne na druhou nohu. Liší se od Drift tím, že:
+**HOTOVO** v Sezení 10 jako globální overlay v `src/character/Gestures.js` s Poisson schedulerem. Architekturální reframe oproti Sezení 8 spec: **NE state machine** s explicit timer, ale globální overlay (sourozenec Fidget/Breathing) s exp inter-arrival pro spuštění. 7 gest implementovaných: armsAkimbo, armsFolded, armsBehindHead, scratchHead, stretch (V-tvar), weightShiftLeft, weightShiftRight. Pose-based keyframes s root deltou (= aditivně k primárce, gesto přidá tilt/posun bez konfliktu s Drift). Trigger jen když isResting (STAND idle / SIT). Sekce zachována jako reference spec — užitečná pro budoucí gesta a varianty (např. SIT-specific gesta jako zkřížit nohy / zamyšlení). Hotová implementace shrnuta v `DONE.md` (Sezení 10) a v sekci „Gestures" v `GLOSSARY.md`.
+
+### Origin spec (Sezení 8 — pre-implementace)
+
+Když postava stojí v idle (Drift / Stand), občas (každých N sekund) se „zachová lidsky" — podrbe, prohrábne si vlasy, založí ruce, přešlápne na druhou nohu. Liší se od Drift tím, že:
 
 - **Drift** = kontinuální drobné nahodilé pohyby
 - **Bio/Fyzio** = diskrétní akce s identitou (= rozpoznatelné gesto), 1–3 sekundy
@@ -142,4 +146,86 @@ Doporučení: **(a) Pose-based** — využije existující `Pose.lerp` infrastru
 
 ### Status
 
-Odložené do F2.x. Spec hotová, čeká na rozhodnutí timing (probably hned po Bio/Fyzio v F3 budou potřeba i Brain timery, takže bude rozumné to dělat společně).
+**→ DONE (Sezení 10)** přes overlay + Poisson scheduler v `Gestures.js`.
+
+## Demo03 — Pose linking *(Sezení 10 plán)*
+
+**Fundament pro budoucí Demo04, F3 Akvárium, F4 specializace** (sbírání, těžba, boj, crafting). Pose-link je atom všeho.
+
+### Algoritmus
+
+P1 (current pose) → P2 (target pose). Distance metric = `distXZ(P1.rootPosition, P2.rootPosition)`. Locomotion picker:
+
+- `d < 0.5 j` → přímý `Pose.lerp` (= existující 0.4 s blend, KISS)
+- `0.5 ≤ d < 5 j` → WALK
+- `5 ≤ d < 15 j` → RUN (jog)
+- `d ≥ 15 j` → SPRINT
+- skok přes překážku → JUMP (Demo04+ s detekcí)
+
+Plus turn-to phase: pokud `P2.position` je za zády postavy, otoč se nejdřív (změň `rootRotation.y` postupně).
+
+### Architektura
+
+Třída `PoseSequence` v `src/character/`:
+```js
+class PoseSequence {
+    constructor(stickman) { this.stages = []; this.idx = 0; }
+    addStage({ status, params, until }) { ... }
+    run(dt) { ... }
+}
+PoseSequence.linkTo(stickman, P2) // factory s distance picker
+```
+
+`stickman.executeSequence(seq)` jako high-level API; existující `setStatus(s, p)` zůstává low-level. Brain v F3 vyrábí sekvence, executor je společný.
+
+### Demo
+
+3 named pose anchors v scéně (markery) + tlačítka „Pojď k A/B/C" + „Pose: lay/sit/stand". Click → postava walk/sprint k anchoru, pak transition do target pose.
+
+### Status
+
+→ TODO po dokončení F2.4 plížení polish a SWIM/CLIMB/SLEEP statusů.
+
+## Demo04 — Interakce s objekty *(Sezení 10 plán)*
+
+Interakce = `PoseSequence` s pinem na world objekt.
+
+### Architektura
+
+Nová vrstva `src/world/` (sourozenec character/, scene/). Třída `Interactable`:
+
+```js
+{
+    position: { x, y, z },
+    approachPose: Pose,           // kam si postava stoupne
+    usePose: Pose,                // co dělá při interakci
+    cycleAnimation?: fn,          // volitelné pro repetitivní motion (pila, tlučení)
+    pinPoints?: { hand: { x,y,z } } // IK targety (klika, madlo)
+}
+```
+
+Click na objekt → `stickman.executeSequence(PoseSequence.interactWith(obj))`:
+1. linkTo(obj.approachPose) — = Demo03 logika
+2. transition do obj.usePose s IK pinem (pokud pinPoint)
+3. hold (do dalšího kliku nebo timeout)
+4. exit — opačně
+
+### Příklady prototypů
+
+| Akce | Skladba |
+|---|---|
+| Sednout na židli | linkTo(přístup) → otoč se → lay-back-into-sit |
+| Lehnout do postele | linkTo(strana postele) → sednout → swing legs → lehnout |
+| Stisknout kliku | linkTo(přístup) → reach IK na kliku → use |
+| Sebrat věc | linkTo(věc.position) → bend down → grab IK → stand → carry pose |
+
+### Risks
+
+- **Orientace:** WALK jde -Z (postavova kupředu). Před WALKem = otočit pelvis přes `rootRotation.y`. Bez toho postava chodí pozpátku.
+- **Pose unreachable:** P2 = laydown na posteli — nelze WALKem doprostřed cesty. → vyžaduje **approachPose** ≠ usePose.
+- **Mid-sequence interrupt:** user klikne nový cíl. Plan abort, nový PoseSequence; current stage gracefully končí přes existující `Pose.capture` v `setStatus`.
+- **Multi-character:** v F3 Akváriu každý Stickman má vlastní PoseSequence. Žádné sdílení state.
+
+### Status
+
+→ TODO po Demo03 PoseSequence. Otevírá cestu k F4+ specializacím (sbírání, těžba, boj, crafting, ...) — vše je další specializace Interactable.

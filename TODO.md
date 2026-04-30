@@ -39,10 +39,11 @@ Sloučí dema 01+02+03+05+07 do jedné stránky. Iterace uzavřena v Sezení 7 (
 
 Sjednotí dynamická dema (04+09+11+12+13) přes nový `Stickman` model se `status` atributem a `animate(dt)` metodou.
 
-- [~] **Vrstva `src/character/`** — prototyp hotový (Sezení 5), rozšířený v Sezení 8 a 9:
-  - [x] `Status.js` — enum (13 stavů, 8 implementovaných: STAND, SIT, WALK, RUN, LAY, CRAWL, PRONE, SNEAK)
-  - [~] `Animations.js` — STAND (s idle/Drift), SIT, WALK, RUN (Jog/Sprint), LAY, CRAWL (po čtyřech, dog-trot), PRONE (plížení, Bezier-through-MID), SNEAK (přikrčená/kachní chůze) hotové; chybí SWIM, CLIMB, JUMP, SLEEP. DANCE = preset Status.STAND idle (ne separátní animace)
+- [~] **Vrstva `src/character/`** — prototyp hotový (Sezení 5), rozšířený v Sezení 8, 9 a 10:
+  - [x] `Status.js` — enum (13 stavů, 9 implementovaných: STAND, SIT, WALK, RUN, LAY, CRAWL, PRONE, SNEAK, JUMP)
+  - [~] `Animations.js` — STAND (s idle/Drift), SIT, WALK, RUN (Jog/Sprint), LAY, CRAWL (po čtyřech, dog-trot), PRONE (plížení, asymetrický 4-fázový cyklus), SNEAK (přikrčená/kachní chůze), JUMP (vertical/long/running presety) hotové; chybí SWIM, CLIMB, SLEEP. DANCE = preset Status.STAND idle (ne separátní animace)
   - [x] `Stickman.js` — wrapper s `setStatus`, `setParams`, `animate(dt)` + plynulé přechody (cubic ease-out, default 0.4 s); shallow-copy params (Sezení 9 — F3-akvárium safe)
+  - [x] `Gestures.js` (Sezení 10) — Bio/Fyzio overlay s Poissonovým schedulerem; 7 gest (armsAkimbo, armsFolded, armsBehindHead, scratchHead, stretch, weightShiftLeft, weightShiftRight); diagonální struktura keyframes s root deltou
 - [x] **F2.1 Sezení 8 — Drift + Run + Neklid + Dance preset:**
   - [x] `animateRun` + `RUN_PRESETS` (jog tempo 1.6 / sprint tempo 2.4) — větší stepAmp, kneeLift, forwardLean, ohnutý loket běžce. Sprint kalibrován: forwardLean 30°, kneeLift 150° (knee drive)
   - [x] `animateStand` rozšířen o Drift (= budget-based random walk, spec z IDEAS.md): lazy state v `params._drift`, quint ease-out per cyklus, root rotace v poolu s `rootRange = 90°` (plný drift)
@@ -52,7 +53,7 @@ Sjednotí dynamická dema (04+09+11+12+13) přes nový `Stickman` model se `stat
   - [x] `demo02_stresstest.html` přepsán podle vzoru Demo 01: 3-column layout, levý panel POSES (Reset/Dance/Drift) + STATUS (Walk/Jog/Sprint), pravý panel jen sekce „Globální → Neklid". Debug overlay (CoM/gravity/body/tooltip) vždy ON
 - [ ] **Pose library expansion** v `src/library/Poses.js`: SIT1..5, JUMP_PREP/AIR/LAND, SLEEP
   - LAY varianty (`layStarfish`, `layChill`, `laySide`, `layReader`, `layRecline`) už existují z F1 — přidat do `Animations.LAY` přes `params.variant`
-- [ ] **Bio/Fyzio episodické akce** (drbání, prohrábnutí vlasů, weight shift, založené ruce) — state machine nad STAND idle; viz IDEAS.md
+- [x] **Bio/Fyzio episodické akce** *(Sezení 10 — implementováno jako overlay s Poisson scheduler v `Gestures.js`, NE state machine. 7 gest hotovo.)*
 - [~] Smazat stará dema *(jejich logika je / bude pohlcena v Inspector / Stress test / Animations.js)*:
   - [x] `demos/demo04_animation.html` *(Sezení 9 — sin/cos cykly pohlcené Drift + WALK + RUN v Animations.js)*
   - [x] `demos/demo06_stability.html` *(Sezení 9 — stability indikátor pohlcený v Inspectoru přes `colorByStability` na CoM markeru)*
@@ -63,6 +64,23 @@ Sjednotí dynamická dema (04+09+11+12+13) přes nový `Stickman` model se `stat
   - [x] `demos/demo14_headsupport.html` *(Sezení 9 — kapalasana/pincha exporty zachovány v Poses.js pro budoucí use)*
   - [x] `demos/demo08_lerp.html` *(Sezení 9 — Pose.lerp je dostatečně demonstrovaný v Inspector pose transitions a Drift cyklu)*
 - [ ] Aktualizovat `index.html` + `README.md` (až po dokončení F2)
+
+### F2.3 Sezení 10 — Bio/Fyzio + JUMP + treadmill + plížení rewrite — **HOTOVO**
+
+- [x] **`src/character/Gestures.js`** — globální overlay diskrétních gest (Bio/Fyzio) s Poisson scheduler. 7 gest: armsAkimbo, armsFolded, armsBehindHead, scratchHead, stretch, weightShiftLeft, weightShiftRight. Diagonální keyframes (REACH/PULL/PASSIVE) + root delta podpora pro celotělové motion (úklon u weightShift). Auto-trigger přes lambda slider 0–0.5/s + manuální buttons.
+- [x] **`Status.JUMP`** — `animateJump` s 5 fázemi (PREP → PUSH → AIR → LAND → RECOVER). 3 presety: vertical (high arc), long/žabák (low arc + forward lean + scissor=0), running (krátký prep + scissor nohy + kontralaterální paže). Snap-to-floor skip během AIR fáze přes `params._airborne`.
+- [x] **Šachovnicová podlaha** — `BasicScene.makeCheckerTexture()` (CanvasTexture, 2j dlaždice, 67% opacity). Floor zvětšen 40×40 → 80×80, shadow bounds ±12 → ±30.
+- [x] **Treadmill v demo02** — postava centrovaná, podlaha posouvá texture offset opačně k pohybu. Algoritmus: identifikuj all supports → max history → použij Z deltu jako body velocity. Manual override `params.forwardSpeed` pro JUMP (kde foot tracking nedává smysl).
+- [x] **Rename `Neklid.js` → `Fidget.js`** — globální izomorfismus názvů AJ. Doménový pojem „Neklid" zachován v UI labelech a komentářích. Refs aktualizované v Gestures.js, Breathing.js, Animations.js, demo02.
+- [x] **PRONE (plížení) rewrite** — z Bezier-through-MID na asymetrický 4-fázový cyklus per noha (REACH → PUSH → PASSIVE → drag). Diagonální párování s pažemi (L paže s P nohou, P paže s L nohou). Vyžaduje další ladění (viz F2.4).
+- [x] **`@THINK` Demo03 + Demo04 plán** — pose linking (PoseSequence: distance metric + locomotion picker) + interakce (Interactable: approachPose + usePose + IK pin). Zapsáno do IDEAS.md jako roadmap pro F3 a dál.
+
+### F2.4 Plížení polish — **otevřené**
+
+PRONE rewrite v Sezení 10 dal nohy do dobrého stavu, ale:
+- [ ] **Paže lifting body** — shoulder.x angles tlačí lokte do podlahy → snap-to-floor zvedá celou postavu. Potřeba přepočítat keyframes pro body rotation -87°: shoulder.x ~170° (= rotace přes vrch do flat-forward), nikoli 60-75° (= mířící do podlahy).
+- [ ] **Floor scroll wrong direction** — current algoritmus (longest history) selhává v plížení: PASSIVE leg ankle drží history forever s |dz|≈0, případně active joint má opačnou Z motion než očekáváno. Potřebuje smarter selection: hybrid history + max |dz|, NEBO sign flip pro plížení.
+- [ ] **Spine C-curve + pelvis rotation** (per uživatelská reference v `c:\TEMP\Plížení\`): spine bends laterally (torso.z) opačně podle stojné nohy; pelvis rotuje vpřed k flexed knee (rootRotation.y nebo torso twist). Hlava counter-rotation. Zatím staticky drženo.
 
 ### F2.2 Sezení 9 — synchronizace + audit + 3 nové statusy + Neklid/Drift přepis — **HOTOVO**
 

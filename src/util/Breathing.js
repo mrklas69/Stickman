@@ -3,13 +3,13 @@
 // Dýchání = pomalý overlay nad primární animaci. Pomalá sinusová modulace
 // `torso.x` a `neck.x` simulující nádech-výdech v klidovém tempu (~15/min).
 //
-// Aplikuje se PO primárce v render loopu (stejně jako Neklid):
+// Aplikuje se PO primárce v render loopu (stejně jako Fidget = „Neklid"):
 //
 //   scene.onUpdate((dt) => {
 //       globalTime += dt;
 //       stickman.animate(dt);
 //       applyBreathing(skel, globalTime, breathingLevel);
-//       applyNeklid(skel, globalTime, neklidLevel);
+//       applyFidget(skel, globalTime, fidgetLevel);
 //       skel.snapToFloor(FLOOR_Y);
 //       view.update();
 //   });
@@ -37,7 +37,7 @@ const AMP_NECK_PER_LEVEL  = 0.15;  // → max 1.5° při level=10
 
 /**
  * Aplikuje dýchání overlay na skeleton. Volat v render loopu PO primární
- * animaci (a obvykle PŘED Neklidem — pořadí v praxi nezáleží, oba jsou
+ * animaci (a obvykle PŘED Fidgetem — pořadí v praxi nezáleží, oba jsou
  * additivní a setAngle clampuje do limits).
  *
  * @param {Skeleton} skeleton

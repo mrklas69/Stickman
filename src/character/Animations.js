@@ -46,24 +46,24 @@ export const DEFAULTS_WALK = Object.freeze({
  */
 export const RUN_PRESETS = Object.freeze({
     jog: Object.freeze({
-        tempo:       1.6,    // Hz (= 2× rychlejší než walk default)
-        stepAmp:     50,     // ° — větší rozkrok než walk
-        kneeLift:    95,     // ° — vyšší zdvih kolena (pata přibližně k zadku)
-        twistAmp:    12,     // ° — výraznější counter-rotation hrudníku
-        swayAmp:     6,      // ° — výraznější sway (silnější otřesy v kroku)
-        forwardLean: 10,     // ° — předklon trupu (těžiště vpřed)
-        elbowBase:   80,     // ° — base ohyb lokte (běžec drží paže pokrčené)
-        armSwing:    true,
+        tempo:        1.6,    // Hz (= 2× rychlejší než walk default)
+        stepAmp:      50,     // ° — větší rozkrok než walk
+        kneeLift:     95,     // ° — vyšší zdvih kolena (pata přibližně k zadku)
+        twistAmp:     12,     // ° — výraznější counter-rotation hrudníku
+        swayAmp:      6,      // ° — výraznější sway (silnější otřesy v kroku)
+        forwardLean:  10,     // ° — předklon trupu (těžiště vpřed)
+        elbowBase:    80,     // ° — base ohyb lokte (běžec drží paže pokrčené)
+        armSwing:     true,
     }),
     sprint: Object.freeze({
-        tempo:       2.4,    // Hz (= 3× walk)
-        stepAmp:     65,     // ° — max rozkrok (anatomický limit hipL/R.x = ±60..70)
-        kneeLift:    150,    // ° — vysoký knee drive (sprint pulls knee up to chest level)
-        twistAmp:    18,     // ° — silný twist (rotace ramen-pánev v rytmu)
-        swayAmp:     8,
-        forwardLean: 30,     // ° — výrazný předklon (sprint posture, váha vpřed)
-        elbowBase:   95,     // ° — loket skoro pravý úhel
-        armSwing:    true,
+        tempo:        2.4,    // Hz (= 3× walk)
+        stepAmp:      65,     // ° — max rozkrok (anatomický limit hipL/R.x = ±60..70)
+        kneeLift:     150,    // ° — vysoký knee drive (sprint pulls knee up to chest level)
+        twistAmp:     18,     // ° — silný twist (rotace ramen-pánev v rytmu)
+        swayAmp:      8,
+        forwardLean:  30,     // ° — výrazný předklon (sprint posture, váha vpřed)
+        elbowBase:    95,     // ° — loket skoro pravý úhel
+        armSwing:     true,
     }),
 });
 
@@ -112,11 +112,53 @@ export const DEFAULTS_CRAWL = Object.freeze({
  *
  * Pose hodnoty byly authored uživatelem v Inspectoru.
  */
+/**
+ * Defaultní parametry pro PRONE (plížení / low army crawl).
+ *
+ * Cyklus = asymetrický 4-fázový (NE symetrický trot). Jedna noha v REACH
+ * (žabí frog up forward), pak PUSH (planted, tělo se posune nad ní), pak
+ * PASSIVE (drag straight back). Druhá noha o 0.5 cyklu offset.
+ *
+ * Per leg cycle:
+ *   t ∈ [0,    0.25)  → REACH → PUSH (planting + body sliding over knee)
+ *   t ∈ [0.25, 0.5)   → PUSH → PASSIVE (lift-off, leg extends back)
+ *   t ∈ [0.5,  0.75)  → PASSIVE drag (= druhá noha pracuje)
+ *   t ∈ [0.75, 1.0)   → PASSIVE → REACH (lift forward into frog)
+ *
+ * Paže + torso jsou zatím STATICKÉ (= legs first iteration). Diagonální
+ * párování s pažemi (L paže ↔ P noha, P paže ↔ L noha) přijde v dalším kroku.
+ */
 export const DEFAULTS_PRONE = Object.freeze({
-    tempo:          0.4,    // Hz — jeden plný cyklus (BASE → INVERSE → BASE) trvá 2.5 s
-    undulationAmp:  10,     // ° — amplituda hadího vlnění torsa
-    liveAmp:         5,     // ° — amplituda „live" wiggle končetin v rest fázích (Sezení 9)
+    tempo:       0.4,    // Hz — pomalé tempo (1 cyklus = 2.5 s)
+    bodyTilt:   -87,     // ° — rootRotation.x (body horizontal)
+    torsoAngle: -11,     // ° — torso.x (mírná deflexe pro head-up siluetu)
+    neckAngle:  -60,     // ° — neck.x záklon (hlava nahoru, kouká vpřed)
 });
+
+// Per-leg keyframes — anatomické úhly (symetrické pro L i P).
+// REACH    = knee max-flexed up forward (žabí frog, max abdukce ven).
+// PUSH     = knee planted on floor, body slid forward over knee
+//            (hip flex DECREASED z REACH → PUSH = body se posunul vpřed).
+// PASSIVE  = leg straight back, dragging on floor.
+const PRONE_LEG_REACH   = { hipX: 84, hipY:  -3, hipZ: 80, kneeX:  97 };
+const PRONE_LEG_PUSH    = { hipX: 25, hipY:  -3, hipZ: 70, kneeX: 100 };
+const PRONE_LEG_PASSIVE = { hipX:  2, hipY: -22, hipZ:  5, kneeX:   0 };
+
+// Per-arm keyframes — kontralaterální párování s nohou:
+//   L paže = stejná phase jako P noha (= když P noha REACH, L paže REACH)
+//   P paže = stejná phase jako L noha
+//
+// POZN. body rotation -87°: shoulder.x ~ 170° rotuje paži z rest "viset dolů
+// (= dozadu po rotaci body)" PŘES vrch do "natažený dopředu, plochý k podlaze".
+// Nižší shoulder.x (např. 65°) znamená paži směřuje DO podlahy → snap-to-floor
+// nadzvedne celou postavu.
+//
+// REACH    = wrist max forward (paže natažená kupředu, plochá k podlaze).
+// PULL     = forearm pulls under body toward waist (vnitřní rot + bent elbow).
+// PASSIVE  = arm lying along body side at body level (paže pasivní).
+const PRONE_ARM_REACH   = { shX: 170, shY:   0, shZ: 20, elX:  30 };
+const PRONE_ARM_PULL    = { shX: 140, shY: -50, shZ: 15, elX: 100 };
+const PRONE_ARM_PASSIVE = { shX:  10, shY:   0, shZ: 10, elX:  15 };
 
 /**
  * Defaultní parametry pro SNEAK (přikrčená/maskovaná chůze).
@@ -140,6 +182,7 @@ export const DEFAULTS_SNEAK = Object.freeze({
     kneeBase:  110,       // ° — silné pokrčení kolen (lýtka klesají k podlaze pod pelvisem)
 
     elbowBase:  60,       // ° — paže držené ohnuté blízko tělu
+    armOut:     30,       // ° — abdukce ramen (paže od těla pro udržení rovnováhy)
     armSwing:   true,     // ruce s drobným swingem v rytmu kroku (× 0.4 vs walk × 0.6)
 });
 
@@ -225,7 +268,7 @@ function animateStand(skeleton, time, params) {
     }
 
     const d = params._drift;
-    // Sync s aktuálními params — slider Neklid mohl změnit fraction.
+    // Sync s aktuálními params — UI mohlo změnit fraction (= jemnost driftu).
     // Přepočet se projeví až na příštím cyklu (nový target dostane nový fraction).
     // Phase-continuous reset by vyžadoval re-capture from = current; zatím KISS.
     d.fraction = params.fraction ?? d.fraction;
@@ -477,189 +520,84 @@ function animateCrawl(skeleton, time, params) {
     skeleton.setAngle('kneeL',     'x', p.kneeBase    + rearL.knee);
 }
 
-// === PRONE (plížení / commando crawl) ======================================
-// Animace = smooth-step lerp mezi dvěma klíčovými pózami:
-//   BASE    — pravá strana nápřahuje (authored v Inspectoru uživatelem).
-//   INVERSE — zrcadlené L↔R (levá strana nápřahuje).
-// Cyklus: BASE → INVERSE → BASE (jeden plný = base+inverse).
-
-// Mapa pro mirror L↔R: jaký joint nahradit jakým při zrcadlení pózy.
-const PRONE_SWAP_LR = Object.freeze({
-    shoulderL: 'shoulderR', shoulderR: 'shoulderL',
-    elbowL:    'elbowR',    elbowR:    'elbowL',
-    hipL:      'hipR',      hipR:      'hipL',
-    kneeL:     'kneeR',     kneeR:     'kneeL',
-});
-
-/** Vyrobí zrcadlenou pose (přejmenuje L↔R joints; rootRotation kopíruje).
- *  Anatomická konvence je symetrická (kladné = ven od těla pro obě strany,
- *  kladné Y = vnější rotace pro obě strany), takže stačí přejmenovat — bez
- *  negace hodnot.
- */
-function mirrorPoseLR(pose) {
-    const out = new Pose(pose.name + '-mirror');
-    out.rootPosition = { ...pose.rootPosition };
-    out.rootRotation = { ...pose.rootRotation };
-    for (const [joint, angles] of Object.entries(pose.angles)) {
-        const target = PRONE_SWAP_LR[joint] || joint;
-        out.angles[target] = { ...angles };
-    }
-    return out;
-}
-
-// BASE pose — authored uživatelem v Inspectoru (Sezení 9). Pravá strana
-// nápřahuje: pravá paže vpřed-natažená, levá paže opřená pod hrudí,
-// levá noha rovně dozadu, pravé koleno přitažené do strany („žába").
-const PRONE_BASE = (() => {
-    const p = new Pose('prone-base');
-    p.angles = {
-        torso:     { x: -11 },
-        neck:      { x: -60 },
-        shoulderL: { x: 59, y:  12, z: 69 },
-        elbowL:    { x: 86 },
-        shoulderR: { x: 73, y: -78, z: 79 },
-        elbowR:    { x: 16 },
-        hipL:      { x:  2, y: -22, z:  5 },
-        hipR:      { x: 84, y:  -3, z: 80 },
-        kneeR:     { x: 97 },
-    };
-    p.rootRotation = { x: -87, y: 0, z: 0 };
-    // rootPosition.y = -3.49 = FLOOR_Y(-4) + 0.51 (= pelvis sedí 0.51 j nad
-    // podlahou, pelvis sphere má radius 0.32). Authored value z Inspectoru;
-    // demo02 musí mít stejný FLOOR_Y aby pose seděla.
-    p.rootPosition = { x: 0, y: -3.49, z: 0 };
-    return p;
-})();
-const PRONE_INVERSE = mirrorPoseLR(PRONE_BASE);
-
-/** Vyrobí pose jako lineární kombinaci 3 pos: result = α·a + β·b + γ·c.
- *  Použito k výpočtu Bezier control pointu (= aby curve prošla MID exact).
- */
-function poseAffineCombo(a, b, c, alpha, beta, gamma) {
-    const out = new Pose('combo');
-    const linAxis = (va, vb, vc) => alpha * (va ?? 0) + beta * (vb ?? 0) + gamma * (vc ?? 0);
-    out.rootPosition = {
-        x: linAxis(a.rootPosition.x, b.rootPosition.x, c.rootPosition.x),
-        y: linAxis(a.rootPosition.y, b.rootPosition.y, c.rootPosition.y),
-        z: linAxis(a.rootPosition.z, b.rootPosition.z, c.rootPosition.z),
-    };
-    out.rootRotation = {
-        x: linAxis(a.rootRotation.x, b.rootRotation.x, c.rootRotation.x),
-        y: linAxis(a.rootRotation.y, b.rootRotation.y, c.rootRotation.y),
-        z: linAxis(a.rootRotation.z, b.rootRotation.z, c.rootRotation.z),
-    };
-    const allJoints = new Set([
-        ...Object.keys(a.angles), ...Object.keys(b.angles), ...Object.keys(c.angles),
-    ]);
-    for (const j of allJoints) {
-        const ja = a.angles[j] || {}, jb = b.angles[j] || {}, jc = c.angles[j] || {};
-        const allAxes = new Set([...Object.keys(ja), ...Object.keys(jb), ...Object.keys(jc)]);
-        out.angles[j] = {};
-        for (const ax of allAxes) {
-            out.angles[j][ax] = linAxis(ja[ax], jb[ax], jc[ax]);
-        }
-    }
-    return out;
-}
-
-
-// MID pose (Sezení 9): authored uživatelem v Inspectoru — PŘECHODOVÝ frame
-// mezi BASE a INVERSE. NENÍ to keyframe k držení; cyklus přes MID jen prochází.
-// Tělo je „rozpláclá žába" — všechny 4 končetiny hluboce ohnuté pod tělo
-// (hipy ~95°, knees 90°), připomíná push-up start.
+// === PRONE (plížení / low army crawl) ======================================
+// Asymetrický 4-fázový cyklus (= NE symetrický trot). Jedna noha v aktivním
+// REACH→PUSH→PASSIVE→REACH cyklu, druhá o 0.5 offset. Ve fázi PASSIVE leg
+// pasivně leží natažená dozadu (= druhá noha aktuálně propeluje).
 //
-// Cyklus = dvojtaktní rytmus chůze (Sezení 9):
-//   beat 1: BASE → INVERSE (pasuje skrz MID v půli kroku)
-//   beat 2: INVERSE → BASE (zase skrz MID)
-// Implementace přes kvadratický Bezier — MID je control point upravený tak,
-// aby B(0.5) = MID exactly. Tím se zabezpečí spojitá rychlost při průchodu
-// MID (žádný pause).
-const PRONE_MID = (() => {
-    const p = new Pose('prone-mid');
-    p.angles = {
-        torso:     { x: -16 },
-        neck:      { x: -60 },
-        shoulderL: { x:  84, z: 73 },
-        elbowL:    { x:  90 },
-        shoulderR: { x:  89, z: 80 },
-        elbowR:    { x:  90 },
-        hipL:      { x:  94, z: 80 },
-        kneeL:     { x:  90 },
-        hipR:      { x: 100, z: 80 },
-        kneeR:     { x:  90 },
-    };
-    p.rootRotation = { x: -98, y: 0, z: 0 };
-    p.rootPosition = { x: 0, y: -3.57, z: 0 };
-    return p;
-})();
+// Vizuální reference: c:\TEMP\Plížení\ (Obrázek.png + Tabulka.csv).
 
-// Bezier control point: B(0.5) = 0.25·start + 0.5·CTRL + 0.25·end = MID
-// → CTRL = 2·MID − 0.5·start − 0.5·end. Symetrie BASE↔INVERSE → jeden CTRL stačí.
-const PRONE_CTRL = poseAffineCombo(PRONE_MID, PRONE_BASE, PRONE_INVERSE, 2, -0.5, -0.5);
+/** Smoothstep — měkké S-křivkové easing 0→1 (žádné trhnutí na keyframe hranách). */
+function smoothstepProne(t) {
+    return t * t * (3 - 2 * t);
+}
+
+/** Lerp dvou key-objektů per-klíč (generická — funguje pro leg keys i arm keys). */
+function lerpProneKeys(a, b, t) {
+    const out = {};
+    for (const k of Object.keys(a)) {
+        out[k] = a[k] + (b[k] - a[k]) * t;
+    }
+    return out;
+}
+
+/**
+ * Generická 4-segmentová phase function. t ∈ [0,1] vrací keyframe-blended
+ * anatomické úhly per fáze cyklu.
+ *
+ *   0..0.25   REACH → ACTIVE    (plant + power stroke)
+ *   0.25..0.5 ACTIVE → PASSIVE  (lift off, retract)
+ *   0.5..0.75 PASSIVE drag      (druhá končetina pracuje)
+ *   0.75..1.0 PASSIVE → REACH   (lift forward, příprava)
+ *
+ * KEY_R = REACH, KEY_A = active middle (PUSH pro nohy / PULL pro paže), KEY_P = PASSIVE.
+ */
+function pronePhase(t, KEY_R, KEY_A, KEY_P) {
+    if (t < 0.25) return lerpProneKeys(KEY_R, KEY_A, smoothstepProne(t * 4));
+    if (t < 0.5)  return lerpProneKeys(KEY_A, KEY_P, smoothstepProne((t - 0.25) * 4));
+    if (t < 0.75) return KEY_P;
+    return               lerpProneKeys(KEY_P, KEY_R, smoothstepProne((t - 0.75) * 4));
+}
 
 function animateProne(skeleton, time, params) {
+    skeleton.reset();
     const p = { ...DEFAULTS_PRONE, ...params };
-    const phase = (time * p.tempo) % 1;
 
-    // Dvojtaktní rytmus chůze (Sezení 9):
-    //   beat 1: 0.0..0.5: BASE → INVERSE (passes through MID at phase 0.25)
-    //   beat 2: 0.5..1.0: INVERSE → BASE (passes through MID at phase 0.75)
-    // Implementováno jako kvadratický Bezier přes (start, ctrl, end) s
-    // ctrl = 2·MID − 0.5·start − 0.5·end → curve B(0.5) = MID přesně.
-    // Smoothstep easing na halfT = walking-rhythm acceleration: pomalé start,
-    // max rychlost při průchodu MID, pomalý dojezd na end. ŽÁDNÝ pause na MID.
-    let halfT, from, to;
-    if (phase < 0.5) {
-        halfT = phase * 2;
-        from = PRONE_BASE;    to = PRONE_INVERSE;
-    } else {
-        halfT = (phase - 0.5) * 2;
-        from = PRONE_INVERSE; to = PRONE_BASE;
-    }
+    // Statická báze — tělo horizontální, head up.
+    skeleton.rootRotation = { x: p.bodyTilt, y: 0, z: 0 };
+    skeleton.setAngle('torso', 'x', p.torsoAngle);
+    skeleton.setAngle('neck',  'x', p.neckAngle);
 
-    const eased = halfT * halfT * (3 - 2 * halfT);
+    // Asymetrický 4-fázový cyklus s diagonálním párováním:
+    //   P noha + L paže v phase t (= když P noha REACH, L paže REACH; atd.)
+    //   L noha + P paže v phase t+0.5
+    const t  = (time * p.tempo) % 1;
+    const tL = (t + 0.5) % 1;
 
-    // Quadratic Bezier via de Casteljau:
-    //   B(t) = lerp(lerp(from, ctrl, t), lerp(ctrl, to, t), t)
-    const p1 = Pose.lerp(from, PRONE_CTRL, eased);
-    const p2 = Pose.lerp(PRONE_CTRL, to,    eased);
-    const blended = Pose.lerp(p1, p2, eased);
-    blended.apply(skeleton);
+    const legR = pronePhase(t,  PRONE_LEG_REACH, PRONE_LEG_PUSH, PRONE_LEG_PASSIVE);
+    const armL = pronePhase(t,  PRONE_ARM_REACH, PRONE_ARM_PULL, PRONE_ARM_PASSIVE);
+    const legL = pronePhase(tL, PRONE_LEG_REACH, PRONE_LEG_PUSH, PRONE_LEG_PASSIVE);
+    const armR = pronePhase(tL, PRONE_ARM_REACH, PRONE_ARM_PULL, PRONE_ARM_PASSIVE);
 
-    // Hadí vlnění (Sezení 9) — tělo se v rytmu cyklu kroutí na stranu propelling.
-    // Cyklus: -cos(2π·phase) → BASE -1 (= zkroucené vpravo / pravá strana propeluje),
-    // MID 0, INVERSE +1, MID 0, BASE -1.
-    // torso.y = twist (rotace kolem páteře); torso.z = lateral flexe (úklon).
-    // Krk dělá protitwist polovičním rozsahem — hlava drží směr i přes pohyby trupu.
-    const wave = -Math.cos(2 * Math.PI * phase);
-    const A = p.undulationAmp;
-    skeleton.setAngle('torso', 'y', wave * A);
-    skeleton.setAngle('torso', 'z', wave * A * 0.5);
-    skeleton.setAngle('neck',  'y', -wave * A * 0.5);
-    skeleton.setAngle('neck',  'z', -wave * A * 0.3);
+    skeleton.setAngle('hipR',  'x', legR.hipX);
+    skeleton.setAngle('hipR',  'y', legR.hipY);
+    skeleton.setAngle('hipR',  'z', legR.hipZ);
+    skeleton.setAngle('kneeR', 'x', legR.kneeX);
 
-    // „Live" wiggle končetin (Sezení 9) — drobné back-and-forth pohyby per
-    // končetina, frekvence 2× cyklus = jedna oscilace na rest fázi končetiny.
-    // Contralateral páry (= komando-crawl rytmus):
-    //   pair A: pravá paže + levá noha (= aktivní v phase 0.75..1.0, wiggle jindy)
-    //   pair B: levá paže + pravá noha (= aktivní v 0.25..0.5, wiggle jindy)
-    // Páry jsou v anti-phase → když pair A propeluje, pair B drží podporu
-    // a zároveň jemně wiggle, a naopak.
-    const cycleA = Math.sin(4 * Math.PI * phase);   // 2× cycle freq
-    const cycleB = -cycleA;                          // anti-phase
-    const L = p.liveAmp;
+    skeleton.setAngle('hipL',  'x', legL.hipX);
+    skeleton.setAngle('hipL',  'y', legL.hipY);
+    skeleton.setAngle('hipL',  'z', legL.hipZ);
+    skeleton.setAngle('kneeL', 'x', legL.kneeX);
 
-    // Pair A — pravá paže + levá noha
-    skeleton.setAngle('shoulderR', 'x', skeleton.joints.shoulderR.angles.x + cycleA * L);
-    skeleton.setAngle('elbowR',    'x', skeleton.joints.elbowR.angles.x    + cycleA * L * 0.6);
-    skeleton.setAngle('hipL',      'x', skeleton.joints.hipL.angles.x      + cycleA * L * 1.2);
-    skeleton.setAngle('kneeL',     'x', skeleton.joints.kneeL.angles.x     + cycleA * L * 0.8);
+    skeleton.setAngle('shoulderL', 'x', armL.shX);
+    skeleton.setAngle('shoulderL', 'y', armL.shY);
+    skeleton.setAngle('shoulderL', 'z', armL.shZ);
+    skeleton.setAngle('elbowL',    'x', armL.elX);
 
-    // Pair B — levá paže + pravá noha
-    skeleton.setAngle('shoulderL', 'x', skeleton.joints.shoulderL.angles.x + cycleB * L);
-    skeleton.setAngle('elbowL',    'x', skeleton.joints.elbowL.angles.x    + cycleB * L * 0.6);
-    skeleton.setAngle('hipR',      'x', skeleton.joints.hipR.angles.x      + cycleB * L * 1.2);
-    skeleton.setAngle('kneeR',     'x', skeleton.joints.kneeR.angles.x     + cycleB * L * 0.8);
+    skeleton.setAngle('shoulderR', 'x', armR.shX);
+    skeleton.setAngle('shoulderR', 'y', armR.shY);
+    skeleton.setAngle('shoulderR', 'z', armR.shZ);
+    skeleton.setAngle('elbowR',    'x', armR.elX);
 }
 
 // === SNEAK (přikrčená/maskovaná chůze) =====================================
@@ -688,7 +626,11 @@ function animateSneak(skeleton, time, params) {
     skeleton.setAngle('hipR',  'x', p.hipBase  + R.hip);
     skeleton.setAngle('kneeR', 'x', p.kneeBase + R.knee);
 
-    // Paže ohnuté blízko tělu, drobný swing (cca polovina walk amplitudy)
+    // Abdukce ramen = paže od těla pro udržení rovnováhy (kachní silueta)
+    skeleton.setAngle('shoulderL', 'z', p.armOut);
+    skeleton.setAngle('shoulderR', 'z', p.armOut);
+
+    // Paže ohnuté, drobný swing (cca polovina walk amplitudy)
     if (p.armSwing) {
         const shL = -R.hip * 0.4;
         const shR = -L.hip * 0.4;
@@ -697,11 +639,145 @@ function animateSneak(skeleton, time, params) {
         skeleton.setAngle('elbowL', 'x', p.elbowBase + Math.abs(shL) * 0.5);
         skeleton.setAngle('elbowR', 'x', p.elbowBase + Math.abs(shR) * 0.5);
     } else {
-        skeleton.setAngle('shoulderL', 'x', 0);
-        skeleton.setAngle('shoulderR', 'x', 0);
-        skeleton.setAngle('elbowL',    'x', p.elbowBase);
-        skeleton.setAngle('elbowR',    'x', p.elbowBase);
+        skeleton.setAngle('elbowL', 'x', p.elbowBase);
+        skeleton.setAngle('elbowR', 'x', p.elbowBase);
     }
+}
+
+// === JUMP (cyklický skok) ===================================================
+// Pět fází per cyklus: PREP (squat) → PUSH (extend, arms swing) → AIR
+// (parabolický arc + tuck/scissor) → LAND (deep flex) → RECOVER (back to stand).
+// Cyklus se opakuje, dokud není přepnut Status.
+//
+// Snap-to-floor trick: během PREP/PUSH/LAND/RECOVER snap udržuje ankle na
+// podlaze (= squat se realizuje pokrčením kolen + snap). Během AIR animace
+// nastavuje `rootPosition.y` na parabolický arc; demo musí přeskočit snap
+// (kontroluje `params._airborne`).
+//
+// Tři presety přes JUMP_PRESETS:
+//   - vertical: vysoký arc, sym. nohy, ze stoje, paže nad hlavu
+//   - long ("žabák"): nižší arc, výrazný předklon, paže vpřed, sym. nohy
+//   - running: krátký prep (= z běhu), scissor nohy, kontralaterální paže
+
+export const DEFAULTS_JUMP = Object.freeze({
+    tempo:       0.7,    // Hz — jeden cyklus PREP→…→RECOVER za 1.4 s
+    liftAmount:  1.5,    // jednotky — peak rootPosition.y v AIR fázi
+    prepDepth:   80,     // ° — flexe kyčlí v PREP/LAND (squat)
+    prepKnee:    110,    // ° — ohyb kolen v PREP/LAND
+    torsoLean:   15,     // ° — předklon trupu v PREP
+    armBack:    -45,     // ° — zapažení v PREP (anticipace)
+    armForward:   90,    // ° — předpažení v PUSH/AIR (= reach up nebo forward)
+    legSplit:     0,     // ° — scissor nohou v AIR (0 = sym, >0 = L vpřed / R vzad)
+});
+
+export const JUMP_PRESETS = Object.freeze({
+    vertical: Object.freeze({ ...DEFAULTS_JUMP, forwardSpeed: 0 }),
+    long: Object.freeze({
+        tempo:      0.6,
+        liftAmount: 0.8,
+        prepDepth:  90,
+        prepKnee:   120,
+        torsoLean:  35,    // výrazný předklon = příprava na forward leap
+        armBack:   -60,
+        armForward: 130,   // paže vpřed (ne nahoru) = forward reach
+        legSplit:    0,
+        forwardSpeed: 2.5, // jednotky/s — žabák průměrnou rychlostí mezi cykly
+    }),
+    running: Object.freeze({
+        tempo:      1.5,   // rychlý cyklus = běžecký rytmus
+        liftAmount: 0.8,
+        prepDepth:  25,    // krátký prep, žádný full squat
+        prepKnee:   50,
+        torsoLean:  25,    // běžecký předklon
+        armBack:   -50,
+        armForward: 110,
+        legSplit:   50,    // nohy v anti-fázi (jedna lead, druhá push-off)
+        forwardSpeed: 7,   // jednotky/s — rychleji než jog
+    }),
+});
+
+function animateJump(skeleton, time, params) {
+    skeleton.reset();
+    const p = { ...DEFAULTS_JUMP, ...params };
+    const phase = (time * p.tempo) % 1;
+
+    // Hodnoty per fáze
+    let hipFlex = 0, kneeFlex = 0, torsoLean = 0, armPos = 0, split = 0;
+    let isAir = false;
+
+    if (phase < 0.25) {
+        // PREP — plynulé sedání do squatu, paže dozadu, mírný předklon.
+        const t = smoothstep(phase / 0.25);
+        hipFlex   = p.prepDepth * t;
+        kneeFlex  = p.prepKnee  * t;
+        torsoLean = p.torsoLean * t;
+        armPos    = p.armBack   * t;
+    } else if (phase < 0.40) {
+        // PUSH — extenze nohou, paže švihem dopředu/nahoru.
+        const t = smoothstep((phase - 0.25) / 0.15);
+        hipFlex   = p.prepDepth * (1 - t);
+        kneeFlex  = p.prepKnee  * (1 - t);
+        torsoLean = p.torsoLean * (1 - t * 0.5);
+        armPos    = p.armBack + (p.armForward - p.armBack) * t;
+    } else if (phase < 0.65) {
+        // AIR — parabolický arc + tuck/scissor. sin(πt) zajišťuje 0 na okrajích
+        // (matching PUSH end + LAND start) → žádné skoky v úhlech.
+        const t = (phase - 0.40) / 0.25;
+        const arc  = 4 * t * (1 - t);    // 0..1..0 (parabola, peak 1 v t=0.5)
+        const tuck = Math.sin(Math.PI * t);
+        skeleton.rootPosition.y = p.liftAmount * arc;
+        hipFlex   = 30 * tuck;
+        kneeFlex  = 60 * tuck;
+        torsoLean = 5 + (p.torsoLean - 5) * 0.3;
+        armPos    = p.armForward;
+        split     = p.legSplit * tuck;
+        isAir = true;
+    } else if (phase < 0.80) {
+        // LAND — hluboká flexe absorbující dopad.
+        const t = smoothstep((phase - 0.65) / 0.15);
+        hipFlex   = p.prepDepth * 1.2 * t;
+        kneeFlex  = p.prepKnee  * 1.2 * t;
+        torsoLean = p.torsoLean * 1.5 * t;
+        armPos    = p.armForward + (-p.armBack * 0.5 - p.armForward) * t;
+    } else {
+        // RECOVER — zpět do neutrálního stoje.
+        const t = smoothstep((phase - 0.80) / 0.20);
+        hipFlex   = p.prepDepth * 1.2 * (1 - t);
+        kneeFlex  = p.prepKnee  * 1.2 * (1 - t);
+        torsoLean = p.torsoLean * 1.5 * (1 - t);
+        armPos    = -p.armBack * 0.5 * (1 - t);
+    }
+
+    skeleton.setAngle('torso', 'x', torsoLean);
+
+    if (split === 0) {
+        // Symetrické nohy a paže (vertical / long)
+        skeleton.setAngle('hipL', 'x', hipFlex);
+        skeleton.setAngle('hipR', 'x', hipFlex);
+        skeleton.setAngle('kneeL', 'x', kneeFlex);
+        skeleton.setAngle('kneeR', 'x', kneeFlex);
+        skeleton.setAngle('shoulderL', 'x', armPos);
+        skeleton.setAngle('shoulderR', 'x', armPos);
+    } else {
+        // Scissor (running): L noha vpřed, R noha vzad; kontralaterální paže.
+        skeleton.setAngle('hipL', 'x', hipFlex + split);
+        skeleton.setAngle('hipR', 'x', hipFlex - split);
+        // Lead leg (L) mírný knee bend, trailing leg (R) výraznější push-off ohyb.
+        skeleton.setAngle('kneeL', 'x', kneeFlex + 20);
+        skeleton.setAngle('kneeR', 'x', kneeFlex + 60);
+        skeleton.setAngle('shoulderL', 'x', armPos - split);   // L paže vzad
+        skeleton.setAngle('shoulderR', 'x', armPos + split);   // R paže vpřed
+        skeleton.setAngle('elbowL', 'x', 80);                  // běžecký loket
+        skeleton.setAngle('elbowR', 'x', 80);
+    }
+
+    // Flag pro demo: při true přeskoč snap-to-floor (postava je v letu).
+    params._airborne = isAir;
+}
+
+/** Smoothstep — měkký S-křivkový easing 0→1 (žádné trhnutí na hranách). */
+function smoothstep(t) {
+    return t * t * (3 - 2 * t);
 }
 
 // === Registr ================================================================
@@ -721,5 +797,6 @@ export const ANIMATIONS = Object.freeze({
     [Status.CRAWL]: animateCrawl,
     [Status.PRONE]: animateProne,
     [Status.SNEAK]: animateSneak,
-    // Zbytek (SWIM, CLIMB, JUMP, SLEEP, DANCE) se doplní v F2.x
+    [Status.JUMP]:  animateJump,
+    // Zbytek (SWIM, CLIMB, SLEEP) se doplní v F2.x
 });

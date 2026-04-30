@@ -27,7 +27,7 @@ The project is consolidating toward 3 final pages (Inspector, Stress test, Aquar
 | # | Demo | What it shows |
 |---|------|---------------|
 | 01 | Inspector | Main static playground. 20 authored poses across 3 sections (POSTOJE / SEDY/KLEKY / LEHY) + Reset/Random; sliders for all 22 DOF + root pos/rot with tooltips and double-click reset; debug overlays (CoM, gravity arrow, body markers, hover tooltips); smooth pose transitions (cubic ease-out); Copy JSON. Snap-to-floor and floor are always on. |
-| 02 | Stress test (F2 prototype) | Dynamic demo over the new `src/character/` layer — `Stickman` wrapper with a `status` attribute and `animate(dt)`. Layout mirrors Inspector: left panel POSES (Reset / Dance / Drift) + STATUS (Walk / Jog / Sprint); right panel global Neklid slider (overlay applied on top of any animation). Drift = budget-based random walk over 22 DOF + 3 root pseudo-axes; Dance = Drift preset in 110 BPM rhythm with constrained root. F2 will add SWIM, CLIMB, JUMP, SLEEP, plus episodic Bio/Fyzio actions over idle. |
+| 02 | Stress test (F2 prototype) | Dynamic demo over the `src/character/` layer — `Stickman` wrapper with `status` + `animate(dt)`. Layout mirrors Inspector: left panel POSES (Reset / Dance / Drift) + STATUS (Walk / Jog / Sprint / Crawl / Prone / Sneak / Vertical jump / Žabák / Running jump); right panel Dýchání + Neklid + Bio/Fyzio sliders. Treadmill: character is centered, the floor (checkerboard, 2j tiles) scrolls opposite to body motion via foot tracking. Drift = lerp toward random P2; Dance = Drift preset in 110 BPM rhythm. Bio/Fyzio = Poisson-scheduled gesture overlay with 7 gestures (armsAkimbo, armsFolded, armsBehindHead, scratchHead, stretch, weightShiftLeft/Right). F2 still missing SWIM, CLIMB, SLEEP. |
 | 10 | IK | 2-bone IK: drag a target, the selected limb follows. |
 | 11 | Swim | Horizontal body (root rotation), three styles: front crawl, backstroke, breaststroke. |
 | 12 | Climb | Ladder climbing, 4-limb cycle, root moves upward. |
@@ -53,7 +53,8 @@ src/scene/      SCENE — shared environment
 src/util/       UTILITIES — pure functions, no Three.js
   Geometry.js       distXZ, distPointToSegmentXZ, convexHullXZ, pointInConvexPolygonXZ
   DemoUI.js         addSlider, addToggle, addButtonGroup, injectStyles
-  Neklid.js         applyNeklid — global overlay of per-axis sin oscillations
+  Fidget.js         applyFidget — global overlay of per-axis sin oscillations (domain term: „Neklid")
+  Breathing.js      applyBreathing — slow torso.x/neck.x sin (~15 breaths/min)
   Palette.js        named color palette (CoM, support, gravity, body markers, …)
 
 src/library/    POSE LIBRARY — defined once, imported everywhere

@@ -248,27 +248,140 @@ stickman.setStatus(Status.STAND, {
 
 = drift v rytmu, omezený root pro stabilitu. **Žádný `animateDance` ani Status.DANCE registr** — KISS. (Status.DANCE v enum zůstává pro budoucí použití, např. specializovaná taneční animace.)
 
-### Neklid *(Sezení 8)*
+### Fidget („Neklid") *(Sezení 8, file rename Sezení 10)*
 
-Globální overlay drobných oscilací nad PRIMÁRNÍ animaci. Aplikuje se v render loopu PO `Stickman.animate(dt)`:
+Globální overlay drobných oscilací nad PRIMÁRNÍ animaci. Doménový pojem v projektu = **„Neklid"**; soubor a identifikátory v kódu = `Fidget` (= globální izomorfismus názvů AJ napříč projekty). UI label v demo02 = „Neklid" (= český termín v UI).
+
+Aplikuje se v render loopu PO `Stickman.animate(dt)`:
 
 ```js
 scene.onUpdate((dt) => {
     globalTime += dt;
     stickman.animate(dt);                       // 1. primárka
-    applyNeklid(skel, globalTime, neklidLevel); // 2. overlay nad to
+    applyFidget(skel, globalTime, fidgetLevel); // 2. overlay nad to
     skel.snapToFloor(FLOOR_Y);
     view.update();
 });
 ```
 
-Implementace `src/util/Neklid.js`:
+Implementace `src/util/Fidget.js`:
 
 - Per-osa deterministická frekvence (0.3–0.8 Hz) + fáze (0–1) přes hash z klíče `joint.axis` (resp. `root.x/y/z`). Cache → každá osa má svou unikátní noise charakteristiku napříč spuštěními.
 - Mapping: `level ∈ [0, 10]` → max ~5° per kloub, ~4° per root osa.
 - Fungue pro VŠECHNY režimy (Walk, Sprint, Drift, Reset, Sit, Lay) — nezávislé na Status.
 
-**Žádný kumulativní bug:** Stickman.animate volá `skeleton.reset()` každý frame (přes pose.apply nebo explicitně v procedurálních animacích); Neklid přidá noise nad čerstvou primárku. Frame N+1 reset smaže předchozí noise.
+**Žádný kumulativní bug:** Stickman.animate volá `skeleton.reset()` každý frame (přes pose.apply nebo explicitně v procedurálních animacích); Fidget přidá noise nad čerstvou primárku. Frame N+1 reset smaže předchozí noise.
+
+### Gestures (Bio/Fyzio) *(Sezení 10)*
+
+Globální overlay diskrétních gest s identitou (ruce v bok, založené ruce, ruce za hlavou, drbání hlavy, protažení do V, weightShift L/R). Sourozenec Fidget/Breathing v render pipeline. Implementace `src/character/Gestures.js`.
+
+Spouštění přes Poissonův proces — **inter-arrival time = Exponential(λ)**:
+```js
+nextEventAt = currentTime + (-Math.log(Math.random()) / lambda)
+```
+
+`λ` v gestech/sekundu (slider „Aktivita" 0–0.5/s v demo02). Při triggeru:
+1. `isResting(stickman)` filtr (= STAND idle = Drift/Dance, nebo SIT)
+2. Filtr `gesture.precondition(skel, status, params)` per gesto
+3. Random uniform pick z kandidátů
+4. Pokud žádný kandidát → reschedule, event missed (= time-homogenní Poisson)
+
+Manual button trigger (`triggerGesture`) bypassuje Poisson + isResting (= UI testing).
+
+Per-Stickman state `{ active, nextAt, scheduled }`. Aktivní gesto se přerusí při změně Status (= `statusAtStart` check); `Pose.capture` v `setStatus` zachytí gesture-modified pose, transition odveze ruce z peak do nové animace.
+
+#### Keyframes formát
+
+Pose-based keyframes (= sekvence pos s časem v normalizovaném intervalu cyklu):
+
+```js
+GESTURES.armsAkimbo = {
+    duration: 2.5,                       // s
+    keyframes: [
+        { at: 0.0, angles: {} },                    // entry rest
+        { at: 0.30, angles: {                       // peak
+            shoulderL: { x: 5, z: 35 },
+            shoulderR: { x: 5, z: 35 },
+            elbowL: { x: 110 }, elbowR: { x: 110 },
+        }},
+        { at: 0.75, angles: { /* hold */ }},
+        { at: 1.0, angles: {} },                    // exit rest
+    ],
+    precondition: (skel, status) => status === Status.STAND,
+}
+```
+
+Keyframes mohou navíc obsahovat **`root` deltu** — `{ rx, ry, rz, px, py, pz }` aditivně k primárce (Drift dál točí pelvis, gesto přidá tilt/posun). Použito pro `weightShiftLeft/Right` (= úklon trupu nad stojnou nohu) a budoucí celotělová gesta.
+
+Smoothstep blending mezi sousedními keyframes uvnitř fáze (= měkký cubic S-curve; bez trhnutí na hranách).
+
+### JUMP *(Sezení 10)*
+
+Cyklický skok přes 5 fází. `Status.JUMP` registr → `animateJump`. 3 presety v `JUMP_PRESETS`:
+
+| Preset | Charakteristika |
+|---|---|
+| `vertical` | high arc (lift 1.5), sym nohy, paže nad hlavu, ze stoje |
+| `long` (žabák) | nižší arc (0.8), výrazný předklon trupu (35°), paže forward (130°), sym nohy |
+| `running` | krátký prep (= z běhu), tempo 1.5, scissor nohy (legSplit 50°), kontralaterální paže |
+
+#### Fáze cyklu
+
+```
+0.00..0.25  PREP    — squat down, arms back (anticipace)
+0.25..0.40  PUSH    — extend legs, arms swing forward (takeoff)
+0.40..0.65  AIR     — parabolický arc rootPosition.y, knee tuck (sin(πt))
+0.65..0.80  LAND    — deep flex (1.2× prep), arms back for balance
+0.80..1.00  RECOVER — back to rest pose
+```
+
+Smoothstep blending uvnitř fáze. Sin(πt) shape pro AIR phase (= 0 na okrajích → continuity s PUSH end a LAND start). Parabola Y arc: `4*t*(1-t)`.
+
+#### Snap-to-floor skip
+
+Animace nastavuje `params._airborne = (phase ∈ [0.40, 0.65])`. Demo render loop kontroluje a přeskakuje snap během AIR (= postava skutečně ve vzduchu, snap by ji vrátil na podlahu).
+
+#### Forward translation
+
+JUMP používá manual `params.forwardSpeed` (= override foot tracking algoritmu — skok není stance-cyklus). Vertical 0, žabák 2.5, running 7. Demo aplikuje na `worldPos.z`.
+
+### Foot tracking (treadmill) *(Sezení 10)*
+
+V demo02 postava drží origin (`rootPosition` fixed); podlaha posouvá texture offset opačně k pohybu (= treadmill efekt s nekonečným patternem přes texture.repeat).
+
+Algoritmus počítá body forward velocity dynamicky z **planted joint Z velocity v body frame**. Per frame:
+
+1. Identifikuj všechny supports = joints s `worldPosition.y ≤ minY + tolerance` (= `0.04 × H`).
+2. Pro každý support inkrementuj `supportHistory` counter (= consecutive frames as support).
+3. Pick joint s **nejdelší history** (= true planted, jistý body-translation indikátor; vyhne se chybnému výběru swing nohy v pozdním swingu, která dočasně padne do tolerance).
+4. Použij jeho world Z deltu (this frame minus prev frame) jako body forward speed.
+5. Aplikuj na `worldPos.z -= dz` + texture offset `-worldPos.z / TILE_SIZE`.
+
+Když žádný support s history ≥ 2 (např. JUMP airborne) → extrapoluj z poslední validní `lastBodyDz`.
+
+Pro JUMP a long-jump → `params.forwardSpeed` manual override (= explicit metadata, foot tracking přeskočí).
+
+**Známý problém (F2.4):** plížení selhává — PASSIVE leg ankle drží history forever ale stojí, případně active joint má opačnou Z motion. Algoritmus picne wrong joint. Možný fix: hybrid history + max |dz|, nebo per-status sign.
+
+### Treadmill *(Sezení 10)*
+
+Demo02 architektura: postava centrovaná v origin scény, podlaha posouvá texture offset opačně k pohybu postavy.
+
+Důvody:
+- Nekonečný floor (= žádný okraj, postava nikdy „nevypadne" z plane).
+- Camera + debug markers jednoduché (= postava na origin = markery na origin).
+- Plynulý visual feedback rychlosti přes šachovnicový pattern.
+
+Implementace v render loop:
+```js
+scene.floor.material.map.offset.set(
+     worldPos.x / TILE_SIZE,
+    -worldPos.z / TILE_SIZE,
+);
+```
+
+`TILE_SIZE = 2` (sync s `BasicScene.makeCheckerTexture` repeat 40 přes 80×80 plane).
 
 ### Stickman *(F2 prototyp — Sezení 5)*
 
