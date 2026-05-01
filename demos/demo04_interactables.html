@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 04 — Interakce s objekty (Stage 2)</title>
+    <link rel="icon" href="data:,">
+
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+
+        /* === Layout: 3-column grid (izomorfismus s ostatními demy) === */
+        #app {
+            position: relative;
+            display: grid;
+            grid-template-columns: 200px 1fr 320px;
+            grid-template-areas: "left viewport right";
+            height: 100vh;
+            width: 100vw;
+        }
+        #viewport     { grid-area: viewport; position: relative;
+                        min-width: 0; min-height: 0; overflow: hidden; }
+        #panel-left   { grid-area: left;   background: #22222b; border-right: 1px solid #444;
+                        overflow-y: auto; padding: 14px 12px; box-sizing: border-box; }
+        #panel-right  { grid-area: right;  background: #22222b; border-left: 1px solid #444;
+                        overflow-y: auto; padding: 14px 14px; box-sizing: border-box; }
+
+        #info { position: absolute; top: 10px; left: 10px;
+                pointer-events: none; text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 2px 0; font-size: 1.05em; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.82em; }
+
+        #hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+                pointer-events: none; text-align: center; font-size: 0.85em;
+                opacity: 0.65; text-shadow: 1px 1px 2px black; }
+
+        #panel-left h3 { margin: 0 0 10px 0; color: #ffaa66;
+                         font-size: 0.85em; text-transform: uppercase;
+                         letter-spacing: 0.5px; }
+        #panel-left h4.section { margin: 14px 0 8px 0;
+                                  color: #ffaa66;
+                                  font-size: 0.85em;
+                                  text-transform: uppercase;
+                                  letter-spacing: 0.5px;
+                                  font-weight: normal;
+                                  border-top: 1px solid #333; padding-top: 12px; }
+        .pose-btn {
+            display: block; width: 100%; padding: 8px 10px;
+            background: #2a2a35; color: #ddd; border: 1px solid #3a3a45;
+            border-radius: 4px; cursor: pointer; margin-bottom: 4px;
+            text-align: left; font-size: 0.85em;
+        }
+        .pose-btn:hover  { background: #3a3a45; }
+
+        #panel-right h3 { margin: 0 0 8px 0; color: #ffaa66;
+                          font-size: 0.85em; text-transform: uppercase;
+                          letter-spacing: 0.5px; }
+        #panel-right p  { font-size: 0.78em; color: #999; line-height: 1.5; }
+        #panel-right code { background: #333; padding: 2px 5px; border-radius: 3px;
+                            font-size: 0.85em; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+<div id="app">
+    <div id="panel-left">
+        <h3>Interakce</h3>
+        <div id="actions-list"></div>
+    </div>
+
+    <div id="viewport">
+        <div id="info">
+            <h2>Demo 04 — Interakce s objekty (Stage 2)</h2>
+            <p>Židle (1-stage: dojdi → sedni) + postel (2-stage: dojdi → sedni na okraj → lehni).</p>
+        </div>
+        <div id="hint">Multi-stage interakce řízená externím schedulerem v demu.</div>
+    </div>
+
+    <div id="panel-right">
+        <h3>Židle (1-stage)</h3>
+        <p>
+            <code>linkTo({ x, z, finalYaw, arrivePosition, then: SIT })</code><br>
+            Přístup → otoč zády → pelvis na sedátko (lerp) → SIT.
+        </p>
+
+        <h3 style="margin-top:14px">Postel (2-stage)</h3>
+        <p>
+            <b>Stage A:</b> linkTo k <code>sitEdge</code> (= okraj postele) s
+            <code>then: SIT</code> → postava sedí pelvisem na okraji.<br>
+            <b>Stage B (po pauze 0.5 s):</b> demo zavolá
+            <code>setStatus(LAY)</code> + <code>worldPos = layCenter</code>
+            (teleport, žádný plynulý lerp). Snap-to-floor zvedne postavu o
+            výšku matrace.
+        </p>
+
+        <h3 style="margin-top:14px">Limitace</h3>
+        <p>
+            Stage B teleport mezi pose je vědomá KISS volba — Stage 3
+            <code>PoseSequence</code> přidá plynulé chained transitions přes
+            běžnější API.
+        </p>
+    </div>
+</div>
+
+<script type="module">
+    import * as THREE         from 'three';
+    import { Skeleton }       from '../src/model/Skeleton.js';
+    import { StickmanView }   from '../src/view/StickmanView.js';
+    import { BasicScene }     from '../src/scene/BasicScene.js';
+    import { Stickman }       from '../src/character/Stickman.js';
+    import { Status }         from '../src/character/Status.js';
+    import { makeChair }      from '../src/world/Chair.js';
+    import { makeBed }        from '../src/world/Bed.js';
+
+    // =========================================================================
+    // 1. Model + scéna + view
+    // =========================================================================
+    const H = 8;
+    const FLOOR_Y = -H / 2;
+    const skel = new Skeleton(H);
+    const view = new StickmanView(skel);
+
+    const viewport = document.getElementById('viewport');
+    const scene = new BasicScene({
+        cameraHeight:    4,
+        cameraDistance: 26,
+        container: viewport,
+        floorY: FLOOR_Y,
+    });
+    scene.scene.add(view.group);
+
+    const stickman = new Stickman(skel, Status.STAND, {});
+
+    // =========================================================================
+    // 2. Objekty ve scéně
+    // =========================================================================
+    // Židle: vlevo bočně, facing 30° (= testuje turn-to při sezení).
+    const chair = makeChair({
+        x: -7, z: -3,
+        facing: 30,
+        floorY: FLOOR_Y,
+        height: H,
+    });
+    scene.scene.add(chair.mesh);
+
+    // Postel: vpravo daleko, facing 0° (= podél world +Z).
+    // Pozor: Stage 2 podporuje JEN facing = 0. Důvod: Stickman při LAY pose
+    // (rootRotation.x = 90°) zapisuje worldYaw do rootRotation.y, ale Skeleton
+    // aplikuje Euler v pořadí Z×Y×X → yaw se vyhodnotí PŘED lay rotací =
+    // postava roluje kolem podélné osy místo otáčení v rovině XZ. Bed s
+    // jiným facing ↦ úhel mezi osou postele a osou postavy = facing (bug).
+    // Fix přes změnu rotation order patří do refaktoru kostry (Stage 3+).
+    const bed = makeBed({
+        x: 8, z: -8,
+        facing: 0,
+        floorY: FLOOR_Y,
+        height: H,
+    });
+    scene.scene.add(bed.mesh);
+
+    // =========================================================================
+    // 3. Multi-stage scheduler — externí, pozoruje stickman state
+    // =========================================================================
+    // bedStep:
+    //   null      = žádná bed sekvence aktivní
+    //   'goingToSitEdge' = postava jde na sit edge, čekáme na arrival + SIT
+    //   'pauseAtEdge'    = postava sedí, čekáme 0.5 s před lay teleportem
+    //   'lying'   = postava leží na posteli
+    let bedStep = null;
+    let pauseTimer = 0;     // sekundy zbývající do dispatchu Stage B
+
+    // Detekce „postava completed link" = už nejde + nerotuje + nemá pending action.
+    function isStickmanIdle() {
+        return stickman.target === null
+            && !stickman.turning
+            && stickman._pendingAction === null;
+    }
+
+    function startBedSequence() {
+        bedStep = 'goingToSitEdge';
+        stickman.linkTo({
+            x:              bed.sitEdge.approach.x,
+            z:              bed.sitEdge.approach.z,
+            finalYaw:       bed.sitEdge.yaw,
+            arrivePosition: { x: bed.sitEdge.x, z: bed.sitEdge.z },
+            then:           { status: Status.SIT, params: {} },
+        });
+    }
+
+    function dispatchLayDown() {
+        // Stage B = teleport: setStatus(LAY) + worldPos na střed postele +
+        // worldYaw na lay yaw. Snap-to-floor s posunutým floorY (níže) zvedne
+        // postavu o tloušťku matrace.
+        stickman.setStatus(Status.LAY, {});
+        stickman.worldPos.x = bed.layCenter.x;
+        stickman.worldPos.z = bed.layCenter.z;
+        stickman.worldYaw   = bed.layCenter.yaw;
+        bedStep = 'lying';
+    }
+
+    // =========================================================================
+    // 4. Levý panel — tlačítka
+    // =========================================================================
+    const actionsContainer = document.getElementById('actions-list');
+
+    function addBtn(parent, label, onClick) {
+        const btn = document.createElement('button');
+        btn.className = 'pose-btn';
+        btn.textContent = label;
+        btn.addEventListener('click', onClick);
+        parent.appendChild(btn);
+        return btn;
+    }
+
+    addBtn(actionsContainer, '▶ Posaď se na židli', () => {
+        bedStep = null;     // přeruš případnou bed sekvenci
+        stickman.linkTo({
+            x:              chair.approach.x,
+            z:              chair.approach.z,
+            finalYaw:       chair.sitYaw,
+            arrivePosition: chair.position,
+            then:           { status: Status.SIT, params: {} },
+        });
+    });
+
+    addBtn(actionsContainer, '▶ Lehni si do postele', () => {
+        startBedSequence();
+    });
+
+    addBtn(actionsContainer, 'Reset polohy', () => {
+        bedStep = null;
+        pauseTimer = 0;
+        stickman.target = null;
+        stickman.turning = false;
+        stickman._pendingAction = null;
+        stickman._onArrival = null;
+        stickman._finalYaw = null;
+        stickman._arrivePosition = null;
+        stickman._arriveLerp = null;
+        stickman.worldPos.x = 0;
+        stickman.worldPos.z = 0;
+        stickman.worldYaw = 0;
+        stickman.setStatus(Status.STAND, {});
+    });
+
+    // =========================================================================
+    // 5. Render loop
+    // =========================================================================
+    skel.snapToFloor(FLOOR_Y);
+    view.update();
+
+    scene.onUpdate((dt) => {
+        // === Bed multi-stage scheduler ===
+        if (bedStep === 'goingToSitEdge' && isStickmanIdle()) {
+            // Stage A dokončen → spustí 0.5 s pauzu (postava chvilku „sedí")
+            bedStep = 'pauseAtEdge';
+            pauseTimer = 0.5;
+        }
+        if (bedStep === 'pauseAtEdge') {
+            pauseTimer -= dt;
+            if (pauseTimer <= 0) dispatchLayDown();    // Stage B
+        }
+
+        stickman.animate(dt);
+
+        // Snap-to-floor: během lay na posteli použij vyšší floor (= vrch matrace),
+        // ostatní stavy = standardní floor.
+        const snapY = (bedStep === 'lying')
+            ? FLOOR_Y + bed.mattressHeight
+            : FLOOR_Y;
+        skel.snapToFloor(snapY);
+
+        view.update();
+    });
+    scene.start();
+</script>
+</body>
+</html>

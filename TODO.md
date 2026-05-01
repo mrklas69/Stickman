@@ -98,6 +98,38 @@ PRONE rewrite v Sezení 10 dal nohy do dobrého stavu, ale:
 - [x] **Limit rozšíření** — neck.x `[-30, 60] → [-60, 60]`, hipL/R.z max `80 → 90`
 - [x] **`@END`** rozšířen o krok 4 „Permission cleanup" (konsolidace settings.json wildcardů)
 
+### F2.5 Sezení 11 — Demo03 Pose linker — **HOTOVO**
+
+Štaflový postup ve 5 fázích, šestá (extrakce do PoseSequence třídy) odložena.
+
+- [x] **Stage 1** — `Stickman.linkTo({x, z})` + `worldPos` field; demo03_linker.html (klik → walk konst. 1.5 j/s, bez turn-to)
+- [x] **Stage 2** — turn-to phase: `worldYaw` field + shortest-path normalize do (-180°, 180°]; postava se otočí k cíli za 0.4 s, pak teprve WALK
+- [x] **Stage 2.5** — rychlost dynamicky z foot trackingu (= identický algoritmus s treadmillem v demo02), žádné magic numbers; reset support state v `setStatus`
+- [x] **Stage 3** — locomotion picker `_pickLocomotion(d)`: `< 5 j` WALK, `< 15 j` Jog, `≥ 15 j` Sprint; `_pendingLocomotion` field předá vybraný status z linkTo do post-turn-to dispatch
+- [x] **Stage 4** — 3 anchors A/B/C: persistentní žluté markery + sprite labely (CanvasTexture s strokem) + tlačítka v levém panelu; click do podlahy = ad-hoc target; Reset polohy
+- [x] **Stage 5** — cílová pose: `linkTo({ x, z, then })` přijímá `then = { status, params }`; `_onArrival` field; B → Sit, C → Lay anchors
+
+### F2.6 Sezení 11 — Demo04 Interakce s objekty (žídle + postel) — **rozjeté**
+
+První 2 stages hotové (= druhý reálný klient pro pose linking, podloží pro Stage 3 PoseSequence refactor).
+
+- [x] **Stage 1 — Židle.** `src/world/Chair.js` factory + `Stickman.linkTo` extension `finalYaw` (post-arrival turn-to) + `arrivePosition` (lerp pelvisu z approach na cíl synchronně s post-turn-to). Demo s tlačítkem „Posaď se", post-turn-to + plynulý posun pelvisu na sedátko. Empirické změření výšky pelvisu v SIT pose = `H × 0.176` (předchozí odhad 36 % byl 2× off).
+- [x] **Stage 2 — Postel.** `src/world/Bed.js` factory (matrace + headboard, výška identicky s židlí). 2-stage interakce řízená externím schedulerem v demu (`bedStep` proměnná, render loop tick): Stage A linkTo k sit edge → 0.5 s pauza → Stage B teleport `worldPos = layCenter` + setStatus(LAY). Snap-to-floor override během lying na vrch matrace. `demos/demo04_interactables.html` sjednocuje židli + postel.
+- [ ] **Stage 3 — PoseSequence refactor.** Po 2 klientech extrahovat link logiku z `Stickman.js` (~150 LOC) do `src/character/PoseSequence.js`. API: `new PoseSequence(stickman).linkTo({...}).wait(t).transitionTo({status, worldPos, worldYaw, duration}).run()`. Plynulé chained transitions (= postel sit→lay s lerp místo teleportu). Audit 6 vrstev per `feedback_skeleton_refactor_checklist`.
+- [ ] **Bug rotation order Z×Y×X.** Při LAY pose (`rootRotation.x = 90°`) se `worldYaw` aplikuje PŘED RX rotace → roll kolem podélné osy postavy místo XZ rotace. Workaround pro Stage 2: `bed.facing = 0`. Plný fix přes change rotation order v `Skeleton.computeWorldTransforms` na `T*Rz*Ry*Rx` (= apply X→Y→Z). Vyžaduje audit pose, Drift overlay, Inspector. Side-quest při Stage 3 nebo samostatně.
+- [ ] **Stage 4+ — další objekty.** Klika/dveře (s IK pinem na hand), sběr věci (= bend down + grab IK + carry pose). Patří k specializovaným interakcím; PoseSequence Stage 3 musí mít API pro IK pin.
+
+### F2.5 Sezení 11 — Demo03 Pose linker — **HOTOVO**
+
+Štaflový postup ve 5 fázích, šestá (extrakce do PoseSequence třídy) přesunuta do F2.6 Stage 3 (= Demo04 jako 2. klient).
+
+- [x] **Stage 1** — `Stickman.linkTo({x, z})` + `worldPos` field; demo03_linker.html (klik → walk konst. 1.5 j/s, bez turn-to)
+- [x] **Stage 2** — turn-to phase: `worldYaw` field + shortest-path normalize do (-180°, 180°]; postava se otočí k cíli za 0.4 s, pak teprve WALK
+- [x] **Stage 2.5** — rychlost dynamicky z foot trackingu (= identický algoritmus s treadmillem v demo02), žádné magic numbers; reset support state v `setStatus`
+- [x] **Stage 3** — locomotion picker `_pickLocomotion(d)`: `< 5 j` WALK, `< 15 j` Jog, `≥ 15 j` Sprint; `_pendingAction` field předá vybraný status z linkTo do post-turn-to dispatch
+- [x] **Stage 4** — 3 anchors A/B/C: persistentní žluté markery + sprite labely (CanvasTexture s strokem) + tlačítka v levém panelu; click do podlahy = ad-hoc target; Reset polohy
+- [x] **Stage 5** — cílová pose: `linkTo({ x, z, then })` přijímá `then = { status, params }`; `_onArrival` field; B → Sit, C → Lay anchors
+
 ### F3 — Akvárium
 
 Multi-instance `Stickman` s "random brain" (state machine přepíná `status` v čase).

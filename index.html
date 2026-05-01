@@ -49,6 +49,14 @@
         <strong>Demo 02 — Stress test (prototyp F2)</strong>
         <span>Dynamické demo nad vrstvou <code>src/character/</code> — Stickman wrapper se status atributem a animate(dt). Stavy: STAND (s Drift idle režimem), SIT, WALK, RUN (Jog/Sprint presety), LAY, CRAWL (po čtyřech, dog-trot) + Dance preset (drift v rytmu) + Dýchání + Neklid overlay. Zbylé stavy (SWIM, CLIMB, JUMP, SLEEP) v dalších iteracích F2.</span>
     </a>
+    <a href="demos/demo03_linker.html">
+        <strong>Demo 03 — Pose linker</strong>
+        <span>Pose linking prototyp (5 fází hotovo). 3 anchors A/B/C s cílovou pose (A → Stand, B → Sit, C → Lay) + ad-hoc click do scény. Postava se otočí k cíli (turn-to ~0.4 s), dojde podle locomotion pickeru (<code>&lt; 5 j</code> WALK, <code>&lt; 15 j</code> Jog, <code>≥ 15 j</code> Sprint), pak přepne na <code>then.status</code>. Rychlost = foot tracking. Extrakce do PoseSequence třídy odložena na Demo04 (= reálné constraints).</span>
+    </a>
+    <a href="demos/demo04_interactables.html">
+        <strong>Demo 04 — Interakce s objekty (Stage 2)</strong>
+        <span>Dva Interactable objekty z vrstvy <code>src/world/</code> — židle (1-stage: dojdi → sedni) a postel (2-stage: dojdi na okraj → sedni → lehni). Linker rozšířen o <code>finalYaw</code> (post-arrival turn-to) a <code>arrivePosition</code> (lerp pelvisu z approach na cíl během rotace). Multi-stage řízeno externím schedulerem v demu — Stage 3 ho extrahuje do <code>PoseSequence</code> třídy.</span>
+    </a>
     <a href="demos/demo10_ik.html">
         <strong>Demo 10 — Inverse Kinematics</strong>
         <span>2-bone IK: posuvníky cíle, vybraná končetina (paže nebo noha) ho automaticky následuje.</span>

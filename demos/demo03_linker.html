@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 03 — Pose linker (Stage 5)</title>
+    <link rel="icon" href="data:,">
+
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+
+        /* === Layout: stejný 3-column grid jako demo01/02 (izomorfismus) === */
+        #app {
+            position: relative;
+            display: grid;
+            grid-template-columns: 200px 1fr 320px;
+            grid-template-areas: "left viewport right";
+            height: 100vh;
+            width: 100vw;
+        }
+        #viewport     { grid-area: viewport; position: relative;
+                        min-width: 0; min-height: 0; overflow: hidden; }
+        #panel-left   { grid-area: left;   background: #22222b; border-right: 1px solid #444;
+                        overflow-y: auto; padding: 14px 12px; box-sizing: border-box; }
+        #panel-right  { grid-area: right;  background: #22222b; border-left: 1px solid #444;
+                        overflow-y: auto; padding: 14px 14px; box-sizing: border-box; }
+
+        /* Hlavička v rohu viewportu */
+        #info { position: absolute; top: 10px; left: 10px;
+                pointer-events: none; text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 2px 0; font-size: 1.05em; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.82em; }
+
+        /* Hint dolní střed: jak ovládat. */
+        #hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+                pointer-events: none; text-align: center; font-size: 0.85em;
+                opacity: 0.65; text-shadow: 1px 1px 2px black; }
+
+        /* === Panel-left: tlačítka stejný styling jako demo01/02 === */
+        #panel-left h3 { margin: 0 0 10px 0; color: #ffaa66;
+                         font-size: 0.85em; text-transform: uppercase;
+                         letter-spacing: 0.5px; }
+        #panel-left h4.section { margin: 14px 0 8px 0;
+                                  color: #ffaa66;
+                                  font-size: 0.85em;
+                                  text-transform: uppercase;
+                                  letter-spacing: 0.5px;
+                                  font-weight: normal;
+                                  border-top: 1px solid #333; padding-top: 12px; }
+        .pose-btn {
+            display: block; width: 100%; padding: 8px 10px;
+            background: #2a2a35; color: #ddd; border: 1px solid #3a3a45;
+            border-radius: 4px; cursor: pointer; margin-bottom: 4px;
+            text-align: left; font-size: 0.85em;
+        }
+        .pose-btn:hover  { background: #3a3a45; }
+        .pose-btn.active { background: #ffaa66; color: #1a1a22; border-color: #ffaa66; }
+
+        #panel-right h3 { margin: 0 0 8px 0; color: #ffaa66;
+                          font-size: 0.85em; text-transform: uppercase;
+                          letter-spacing: 0.5px; }
+        #panel-right p  { font-size: 0.78em; color: #999; line-height: 1.5; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+<div id="app">
+    <!-- Levý panel: anchors A/B/C -->
+    <div id="panel-left">
+        <h3>Anchors</h3>
+        <div id="anchors-list"></div>
+
+        <h4 class="section">Akce</h4>
+        <div id="actions-list"></div>
+    </div>
+
+    <!-- Hlavní viewport (3D scéna) -->
+    <div id="viewport">
+        <div id="info">
+            <h2>Demo 03 — Pose linker (Stage 5)</h2>
+            <p>3 anchors A/B/C + click do scény. Locomotion picker + cílová pose po dorazu.</p>
+        </div>
+        <div id="hint">Klik na anchor button NEBO klik na podlahu = cíl.</div>
+    </div>
+
+    <div id="panel-right">
+        <h3>Locomotion</h3>
+        <p>
+            Hranice se vybírají v <code>_pickLocomotion()</code>:<br>
+            • &lt; 5 j → <b>WALK</b><br>
+            • &lt; 15 j → <b>Jog</b><br>
+            • ≥ 15 j → <b>Sprint</b>
+        </p>
+        <p>
+            Rychlost se nepočítá z konstanty, ale z rychlosti stojné nohy
+            v body frame (foot tracking). RUN má větší stride a tempo →
+            automaticky vyšší rychlost.
+        </p>
+
+        <h3 style="margin-top:14px">Cílová pose</h3>
+        <p>
+            Anchor může mít <code>then = { status, params }</code>. Po arrival
+            Stickman přepne na ten status místo defaultního STAND. Anchor B
+            sedí, anchor C leží. Klik do podlahy = bez <code>then</code> = STAND.
+        </p>
+    </div>
+</div>
+
+<script type="module">
+    import * as THREE         from 'three';
+    import { Skeleton }       from '../src/model/Skeleton.js';
+    import { StickmanView }   from '../src/view/StickmanView.js';
+    import { BasicScene }     from '../src/scene/BasicScene.js';
+    import { Stickman }       from '../src/character/Stickman.js';
+    import { Status }         from '../src/character/Status.js';
+
+    // =========================================================================
+    // 1. Model + scéna + view
+    // =========================================================================
+    const H = 8;
+    const FLOOR_Y = -H / 2;
+    const skel = new Skeleton(H);
+    const view = new StickmanView(skel);
+
+    const viewport = document.getElementById('viewport');
+    // Kamera lehce shora (cameraHeight=4) pro orientaci v prostoru.
+    // cameraDistance = 22 (= postava je menší část záběru, vidět cíle).
+    const scene = new BasicScene({
+        cameraHeight:    4,
+        cameraDistance: 22,
+        container: viewport,
+        floorY: FLOOR_Y,
+    });
+    scene.scene.add(view.group);
+
+    // =========================================================================
+    // 2. Stickman wrapper
+    // =========================================================================
+    const stickman = new Stickman(skel, Status.STAND, {});
+
+    // =========================================================================
+    // 3. Anchors A/B/C — persistentní markery v scéně + tlačítka + cílová pose
+    // =========================================================================
+    // Definice anchorů: pozice (x, z), label pro 3D sprite, btnLabel pro tlačítko,
+    // a optional `then = { status, params }` (cílová pose po arrival, Stage 5):
+    //   A: vlevo vzadu, then=null   → po arrival STAND (default)
+    //   B: vpravo daleko, then=SIT  → postava si po dorazu sedne (= „židle")
+    //   C: vepředu, then=LAY        → postava si po dorazu lehne (= „postel")
+    //
+    // Hodnoty `then` jsou jen { status, params } — Stickman.linkTo je předá
+    // dál; arrival block volá setStatus(then.status, then.params).
+    const ANCHORS = [
+        { x:  -8, z:  -3, label: 'A', btnLabel: 'A — Stand',
+          then: null },
+        { x:  12, z: -10, label: 'B', btnLabel: 'B — Sit',
+          then: { status: Status.SIT, params: {} } },
+        { x:   0, z:  -4, label: 'C', btnLabel: 'C — Lay',
+          then: { status: Status.LAY, params: {} } },
+    ];
+
+    /**
+     * Vyrobí Sprite s textovou popiskou (canvas → texture). KISS varianta
+     * pro 3D label nad markerem; alternativa TextGeometry by zahrnovala
+     * font loading a rotaci se kamerou (sprite vždy facing camera).
+     */
+    function makeLabelSprite(text) {
+        const size = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffcc44';                          // žlutá = anchor color
+        ctx.font = 'bold 96px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#000';
+        // Stroke pro čitelnost na variabilní podlaze (i bez bg fill)
+        ctx.strokeText(text, size / 2, size / 2);
+        ctx.fillText(text, size / 2, size / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(1.2, 1.2, 1);                      // velikost ve world units
+        return sprite;
+    }
+
+    // Šablona anchor markeru: žlutý válec + label sprite nad ním.
+    const anchorMat = new THREE.MeshStandardMaterial({
+        color: 0xffcc44,            // žlutá = persistent anchor
+        emissive: 0x442200,
+        roughness: 0.4,
+    });
+    for (const a of ANCHORS) {
+        const cyl = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.18, 0.25, 0.6, 12),
+            anchorMat,
+        );
+        cyl.position.set(a.x, FLOOR_Y + 0.3, a.z);
+        scene.scene.add(cyl);
+
+        const label = makeLabelSprite(a.label);
+        label.position.set(a.x, FLOOR_Y + 1.4, a.z);        // sprite plave 1.4 j nad podlahou
+        scene.scene.add(label);
+    }
+
+    // =========================================================================
+    // 4. Click target marker — zelený, viditelný jen při aktivním pohybu
+    // =========================================================================
+    const target = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.25, 0.6, 12),
+        new THREE.MeshStandardMaterial({
+            color: 0x66ff88,        // zelená = aktivní target (komplement žluté)
+            emissive: 0x224422,
+            roughness: 0.4,
+        }),
+    );
+    target.position.y = FLOOR_Y + 0.3;
+    target.visible = false;
+    scene.scene.add(target);
+
+    /**
+     * Spustí pohyb postavy ke světovému bodu (x, z) + nastaví target marker.
+     * Sjednocuje obsluhu kliků na anchor button i na podlahu.
+     *
+     * @param {number} x
+     * @param {number} z
+     * @param {{status: string, params: object}|null} then - cílová pose po arrival
+     */
+    function goTo(x, z, then = null) {
+        stickman.linkTo({ x, z, then });
+        // linkTo provede arrival check (no-op pokud < 0.3 j); v takovém případě
+        // marker stejně schováme, postava nikam nejde.
+        if (stickman.target !== null) {
+            target.position.x = x;
+            target.position.z = z;
+            target.visible = true;
+        }
+    }
+
+    // =========================================================================
+    // 5. Tlačítka v levém panelu
+    // =========================================================================
+    const anchorsContainer = document.getElementById('anchors-list');
+    const actionsContainer = document.getElementById('actions-list');
+
+    function addBtn(parent, label, onClick) {
+        const btn = document.createElement('button');
+        btn.className = 'pose-btn';
+        btn.textContent = label;
+        btn.addEventListener('click', onClick);
+        parent.appendChild(btn);
+        return btn;
+    }
+
+    for (const a of ANCHORS) {
+        addBtn(anchorsContainer, `▶ ${a.btnLabel}`, () => goTo(a.x, a.z, a.then));
+    }
+
+    addBtn(actionsContainer, 'Reset polohy', () => {
+        // Tvrdý reset: zastav, zruš target a pending akce, postav postavu zpět na (0, 0).
+        stickman.target = null;
+        stickman.turning = false;
+        stickman._pendingAction = null;
+        stickman._onArrival = null;
+        stickman.worldPos.x = 0;
+        stickman.worldPos.z = 0;
+        stickman.worldYaw = 0;
+        stickman.setStatus(Status.STAND, {});
+        target.visible = false;
+    });
+
+    // =========================================================================
+    // 6. Click handler — ray-cast na podlahu (= ad-hoc target mimo anchors)
+    // =========================================================================
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+
+    scene.renderer.domElement.addEventListener('click', (e) => {
+        const rect = scene.renderer.domElement.getBoundingClientRect();
+        ndc.x = ((e.clientX - rect.left) / rect.width)  *  2 - 1;
+        ndc.y = ((e.clientY - rect.top)  / rect.height) * -2 + 1;
+        raycaster.setFromCamera(ndc, scene.camera);
+
+        const hits = raycaster.intersectObject(scene.floor);
+        if (hits.length === 0) return;
+        goTo(hits[0].point.x, hits[0].point.z);
+    });
+
+    // =========================================================================
+    // 7. Render loop
+    // =========================================================================
+    skel.snapToFloor(FLOOR_Y);
+    view.update();
+
+    scene.onUpdate((dt) => {
+        stickman.animate(dt);
+        skel.snapToFloor(FLOOR_Y);
+
+        // Když Stickman dorazí, sám si přepne target = null + Status.STAND.
+        if (stickman.target === null) target.visible = false;
+
+        view.update();
+    });
+    scene.start();
+</script>
+</body>
+</html>

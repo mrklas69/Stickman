@@ -404,6 +404,21 @@ Easing = **cubic ease-out** (`1 − (1−t)³`). Důvod volby: postava rychle re
 
 Edge case — **přepnutí mid-transition**: `Pose.capture` zachytí AKTUÁLNĚ blended pózu (ne původní `transitionFrom`), takže nový přechod plynule pokračuje z aktuálního stavu, žádný "skok zpět".
 
+### Pose linking (linkTo) *(Demo03 — Sezení 11)*
+
+Postava dojde z aktuální polohy k cíli a volitelně přepne na cílovou pose. Vstupní bod: `stickman.linkTo({ x, z, then })` (`then = { status, params }` je optional).
+
+Vnitřní 4-fázová sekvence:
+
+1. **Distance pick** v `_pickLocomotion(d)` — `< 5 j` WALK, `< 15 j` Jog (`RUN_PRESETS.jog`), `≥ 15 j` Sprint (`RUN_PRESETS.sprint`). Vyhodnocuje se jen při `linkTo`, během cesty se nemění.
+2. **Turn-to phase** — pokud rozdíl yaw mezi aktuální orientací a směrem k cíli je `≥ 5°`, postava nejdřív stojí (Status.STAND) a `worldYaw` se interpoluje shortest-path do cíle za `turnDuration` (default `0.4 s`). Při `< 5°` se přeskočí.
+3. **Locomotion** — `setStatus` na vybraný status (WALK / RUN s preset). Rychlost není konstanta — je to rychlost stojné nohy v body frame přes [foot tracking](#foot-tracking-treadmill). Posun `worldPos` se akumuluje v `Stickman.animate`.
+4. **Arrival** při `distance < 0.3 j` — `setStatus(then.status, then.params)`, default `STAND`. Anchor s `then = { status: SIT }` → postava si po dorazu sedne.
+
+Stickman vlastní `worldPos` a `worldYaw`; po `fn()` / Pose.apply zapisuje pravdu zpět do `skel.rootPosition.x/z + rootRotation.y` (= animace fn() můžou volat `skel.reset()` bez konfliktu). Algoritmus selhává pro plížení (PRONE), kde PASSIVE noha drží history navždy s |dz|≈0 — viz odložené v F2.4.
+
+Generalizovaná `PoseSequence` třída (multi-stage: approach → IK pin → hold → exit) je plánovaná pro Demo04 Interactable, kde reálné constraints (IK pin v turn-to, interruption mid-sequence) ukáží potřebné API. Aktuálně by byla premature abstraction nad jediným klientem.
+
 ### Brain *(plánováno, F3)*
 
 State machine s timery (idle 5 s → walk 10 s → sit 8 s → …). Markov-chain pravděpodobnosti přechodů mezi statusy. **Žádné LLM/planning.** Použití v akváriu (multi-instance Stickman).
