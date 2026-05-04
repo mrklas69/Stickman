@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Demo 04 — Interakce s objekty (Stage 2)</title>
+    <title>Demo 04 — Interakce s objekty (Stage 3 — PoseSequence)</title>
     <link rel="icon" href="data:,">
 
     <style>
@@ -75,34 +75,47 @@
 
     <div id="viewport">
         <div id="info">
-            <h2>Demo 04 — Interakce s objekty (Stage 2)</h2>
-            <p>Židle (1-stage: dojdi → sedni) + postel (2-stage: dojdi → sedni na okraj → lehni).</p>
+            <h2>Demo 04 — Interakce s objekty (PoseSequence)</h2>
+            <p>Židle: linkTo + setStatus(SIT). Postel: linkTo + SIT + wait + transitionTo(LAY) — plynulý lerp pelvisu z okraje na střed.</p>
         </div>
-        <div id="hint">Multi-stage interakce řízená externím schedulerem v demu.</div>
+        <div id="hint">Sekvence akcí v jednom builder volání.</div>
     </div>
 
     <div id="panel-right">
-        <h3>Židle (1-stage)</h3>
+        <h3>Židle</h3>
         <p>
-            <code>linkTo({ x, z, finalYaw, arrivePosition, then: SIT })</code><br>
-            Přístup → otoč zády → pelvis na sedátko (lerp) → SIT.
+            <code>new PoseSequence(s)<br>
+              .linkTo({ x, z, finalYaw, arrivePosition })<br>
+              .setStatus(SIT)<br>
+              .run();</code>
+        </p>
+        <p>
+            Přístup → otoč zády → pelvis na sedátko (synchronní lerp s
+            post-turn-to) → SIT pose blend.
         </p>
 
-        <h3 style="margin-top:14px">Postel (2-stage)</h3>
+        <h3 style="margin-top:14px">Postel</h3>
         <p>
-            <b>Stage A:</b> linkTo k <code>sitEdge</code> (= okraj postele) s
-            <code>then: SIT</code> → postava sedí pelvisem na okraji.<br>
-            <b>Stage B (po pauze 0.5 s):</b> demo zavolá
-            <code>setStatus(LAY)</code> + <code>worldPos = layCenter</code>
-            (teleport, žádný plynulý lerp). Snap-to-floor zvedne postavu o
-            výšku matrace.
+            <code>new PoseSequence(s)<br>
+              .linkTo({ ..., finalYaw, arrivePosition })<br>
+              .setStatus(SIT)<br>
+              .wait(0.5)<br>
+              .transitionTo({ worldPos: layCenter,<br>
+                &nbsp;&nbsp;status: LAY, duration: 0.6 })<br>
+              .run();</code>
+        </p>
+        <p>
+            <code>transitionTo</code> lerpuje pelvis z okraje matrace na
+            střed synchronně se SIT→LAY pose blendem (= plynulé „lehnu si do
+            postele" místo teleportu).
         </p>
 
-        <h3 style="margin-top:14px">Limitace</h3>
+        <h3 style="margin-top:14px">PoseSequence</h3>
         <p>
-            Stage B teleport mezi pose je vědomá KISS volba — Stage 3
-            <code>PoseSequence</code> přidá plynulé chained transitions přes
-            běžnější API.
+            Builder pattern, step array uvnitř. 4 primitives:
+            <code>linkTo</code>, <code>setStatus</code>, <code>wait</code>,
+            <code>transitionTo</code>. Stickman drží <code>_activeSeq</code>
+            a tickuje ho v <code>animate(dt)</code>.
         </p>
     </div>
 </div>
@@ -113,6 +126,7 @@
     import { StickmanView }   from '../src/view/StickmanView.js';
     import { BasicScene }     from '../src/scene/BasicScene.js';
     import { Stickman }       from '../src/character/Stickman.js';
+    import { PoseSequence }   from '../src/character/PoseSequence.js';
     import { Status }         from '../src/character/Status.js';
     import { makeChair }      from '../src/world/Chair.js';
     import { makeBed }        from '../src/world/Bed.js';
@@ -149,12 +163,12 @@
     scene.scene.add(chair.mesh);
 
     // Postel: vpravo daleko, facing 0° (= podél world +Z).
-    // Pozor: Stage 2 podporuje JEN facing = 0. Důvod: Stickman při LAY pose
+    // Pozor: podporuje JEN facing = 0. Důvod: Stickman při LAY pose
     // (rootRotation.x = 90°) zapisuje worldYaw do rootRotation.y, ale Skeleton
     // aplikuje Euler v pořadí Z×Y×X → yaw se vyhodnotí PŘED lay rotací =
     // postava roluje kolem podélné osy místo otáčení v rovině XZ. Bed s
     // jiným facing ↦ úhel mezi osou postele a osou postavy = facing (bug).
-    // Fix přes změnu rotation order patří do refaktoru kostry (Stage 3+).
+    // Fix přes změnu rotation order patří do refaktoru kostry.
     const bed = makeBed({
         x: 8, z: -8,
         facing: 0,
@@ -164,44 +178,16 @@
     scene.scene.add(bed.mesh);
 
     // =========================================================================
-    // 3. Multi-stage scheduler — externí, pozoruje stickman state
+    // 3. Stav „postava na matraci" — řídí snap-to-floor override
     // =========================================================================
-    // bedStep:
-    //   null      = žádná bed sekvence aktivní
-    //   'goingToSitEdge' = postava jde na sit edge, čekáme na arrival + SIT
-    //   'pauseAtEdge'    = postava sedí, čekáme 0.5 s před lay teleportem
-    //   'lying'   = postava leží na posteli
-    let bedStep = null;
-    let pauseTimer = 0;     // sekundy zbývající do dispatchu Stage B
-
-    // Detekce „postava completed link" = už nejde + nerotuje + nemá pending action.
-    function isStickmanIdle() {
-        return stickman.target === null
-            && !stickman.turning
-            && stickman._pendingAction === null;
-    }
-
-    function startBedSequence() {
-        bedStep = 'goingToSitEdge';
-        stickman.linkTo({
-            x:              bed.sitEdge.approach.x,
-            z:              bed.sitEdge.approach.z,
-            finalYaw:       bed.sitEdge.yaw,
-            arrivePosition: { x: bed.sitEdge.x, z: bed.sitEdge.z },
-            then:           { status: Status.SIT, params: {} },
-        });
-    }
-
-    function dispatchLayDown() {
-        // Stage B = teleport: setStatus(LAY) + worldPos na střed postele +
-        // worldYaw na lay yaw. Snap-to-floor s posunutým floorY (níže) zvedne
-        // postavu o tloušťku matrace.
-        stickman.setStatus(Status.LAY, {});
-        stickman.worldPos.x = bed.layCenter.x;
-        stickman.worldPos.z = bed.layCenter.z;
-        stickman.worldYaw   = bed.layCenter.yaw;
-        bedStep = 'lying';
-    }
+    // Demo musí vědět, kdy postava při LAY leží na vrchu matrace (= snap-to-
+    // floor zvedne podlahu o mattressHeight). Flag se nastavuje při klik na
+    // „Lehni si do postele" a maže se při klik na židli / Reset.
+    //
+    // Geometrický test (= „postava je nad matrací") by byl čistší (snímán
+    // automaticky), ale je drahý + vyžaduje znalost rozměrů postele v render
+    // loopu. Flag = jednoduché demo-specific řešení.
+    let onBed = false;
 
     // =========================================================================
     // 4. Levý panel — tlačítka
@@ -218,30 +204,49 @@
     }
 
     addBtn(actionsContainer, '▶ Posaď se na židli', () => {
-        bedStep = null;     // přeruš případnou bed sekvenci
-        stickman.linkTo({
-            x:              chair.approach.x,
-            z:              chair.approach.z,
-            finalYaw:       chair.sitYaw,
-            arrivePosition: chair.position,
-            then:           { status: Status.SIT, params: {} },
-        });
+        onBed = false;     // přechod ze židle ↔ postel resetuje matrace flag
+        new PoseSequence(stickman)
+            .linkTo({
+                x:              chair.approach.x,
+                z:              chair.approach.z,
+                finalYaw:       chair.sitYaw,
+                arrivePosition: chair.position,
+            })
+            .setStatus(Status.SIT)
+            .run();
     });
 
     addBtn(actionsContainer, '▶ Lehni si do postele', () => {
-        startBedSequence();
+        onBed = true;
+        new PoseSequence(stickman)
+            // 1. Dojdi k okraji postele, otoč zády, posaď se na okraj.
+            .linkTo({
+                x:              bed.sitEdge.approach.x,
+                z:              bed.sitEdge.approach.z,
+                finalYaw:       bed.sitEdge.yaw,
+                arrivePosition: { x: bed.sitEdge.x, z: bed.sitEdge.z },
+            })
+            .setStatus(Status.SIT)
+            // 2. „Vychutnej si chvilku sezení."
+            .wait(0.5)
+            // 3. Plynulý lerp: pelvis z okraje na střed matrace (worldPos)
+            //    synchronně s SIT→LAY pose blendem (Pose.lerp v setStatus).
+            //    duration 0.6 s > stickman.transitionDuration 0.4 s → pose
+            //    se přepne dřív než dojede pos lerp (postava si „lehne na
+            //    místě, pak doplaže pelvisem na střed").
+            .transitionTo({
+                worldPos: { x: bed.layCenter.x, z: bed.layCenter.z },
+                worldYaw: bed.layCenter.yaw,
+                status:   Status.LAY,
+                duration: 0.6,
+            })
+            .run();
     });
 
     addBtn(actionsContainer, 'Reset polohy', () => {
-        bedStep = null;
-        pauseTimer = 0;
-        stickman.target = null;
-        stickman.turning = false;
-        stickman._pendingAction = null;
-        stickman._onArrival = null;
-        stickman._finalYaw = null;
-        stickman._arrivePosition = null;
-        stickman._arriveLerp = null;
+        // Zruš aktivní seq + postav postavu zpět na (0, 0).
+        if (stickman._activeSeq) stickman._activeSeq.abort();
+        onBed = false;
         stickman.worldPos.x = 0;
         stickman.worldPos.z = 0;
         stickman.worldYaw = 0;
@@ -255,24 +260,14 @@
     view.update();
 
     scene.onUpdate((dt) => {
-        // === Bed multi-stage scheduler ===
-        if (bedStep === 'goingToSitEdge' && isStickmanIdle()) {
-            // Stage A dokončen → spustí 0.5 s pauzu (postava chvilku „sedí")
-            bedStep = 'pauseAtEdge';
-            pauseTimer = 0.5;
-        }
-        if (bedStep === 'pauseAtEdge') {
-            pauseTimer -= dt;
-            if (pauseTimer <= 0) dispatchLayDown();    // Stage B
-        }
-
         stickman.animate(dt);
 
-        // Snap-to-floor: během lay na posteli použij vyšší floor (= vrch matrace),
-        // ostatní stavy = standardní floor.
-        const snapY = (bedStep === 'lying')
-            ? FLOOR_Y + bed.mattressHeight
-            : FLOOR_Y;
+        // Snap-to-floor override: během LAY na posteli zvedneme podlahu
+        // o tloušťku matrace → pelvis přistane na vrchu matrace, ne pod ní.
+        // Aktivní jen pro Status.LAY (ne pro průchodný SIT před transitionTo —
+        // pelvis při SIT je sám geometricky na výšce sedátka = vrch matrace).
+        const onMattress = onBed && stickman.status === Status.LAY;
+        const snapY = onMattress ? FLOOR_Y + bed.mattressHeight : FLOOR_Y;
         skel.snapToFloor(snapY);
 
         view.update();

@@ -148,7 +148,11 @@ Doporučení: **(a) Pose-based** — využije existující `Pose.lerp` infrastru
 
 **→ DONE (Sezení 10)** přes overlay + Poisson scheduler v `Gestures.js`.
 
-## Demo03 — Pose linking *(Sezení 10 plán)*
+## ~~Demo03 — Pose linking~~ → DONE *(Sezení 10 plán → Sezení 11 + 12 implementace)*
+
+**HOTOVO** přes `Stickman.linkTo` (Sezení 11 — 5 stages) → extrahováno do `src/character/PoseSequence.js` (Sezení 12 — F2.7). Spec zachován jako reference. Implementace v `GLOSSARY.md` sekce „PoseSequence".
+
+### Origin spec *(Sezení 10 — pre-implementace)*
 
 **Fundament pro budoucí Demo04, F3 Akvárium, F4 specializace** (sbírání, těžba, boj, crafting). Pose-link je atom všeho.
 
@@ -186,7 +190,11 @@ PoseSequence.linkTo(stickman, P2) // factory s distance picker
 
 → TODO po dokončení F2.4 plížení polish a SWIM/CLIMB/SLEEP statusů.
 
-## Demo04 — Interakce s objekty *(Sezení 10 plán)*
+## ~~Demo04 — Interakce s objekty~~ → částečně DONE *(Sezení 10 plán → Sezení 11 + 12 implementace)*
+
+**HOTOVO**: židle (Stage 1, Sezení 11) + postel (Stage 2, Sezení 11 → plynulý sit→lay přes `transitionTo` v Sezení 12). `src/world/` vrstva (Chair.js, Bed.js). `Stickman.linkTo` extension `finalYaw` + `arrivePosition` (Sezení 11) → extrakce do `PoseSequence` (Sezení 12). **Otevřeno** (Stage 4+): klika/dveře (s IK pinem), sběr věci (= bend down + grab IK + carry pose). Spec zachován níže.
+
+### Origin spec *(Sezení 10 — pre-implementace)*
 
 Interakce = `PoseSequence` s pinem na world objekt.
 

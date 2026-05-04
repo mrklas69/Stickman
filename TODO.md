@@ -109,26 +109,23 @@ PRONE rewrite v Sezení 10 dal nohy do dobrého stavu, ale:
 - [x] **Stage 4** — 3 anchors A/B/C: persistentní žluté markery + sprite labely (CanvasTexture s strokem) + tlačítka v levém panelu; click do podlahy = ad-hoc target; Reset polohy
 - [x] **Stage 5** — cílová pose: `linkTo({ x, z, then })` přijímá `then = { status, params }`; `_onArrival` field; B → Sit, C → Lay anchors
 
-### F2.6 Sezení 11 — Demo04 Interakce s objekty (žídle + postel) — **rozjeté**
-
-První 2 stages hotové (= druhý reálný klient pro pose linking, podloží pro Stage 3 PoseSequence refactor).
+### F2.6 Sezení 11 — Demo04 Interakce s objekty (židle + postel) — **HOTOVO** (2 z 2 stages)
 
 - [x] **Stage 1 — Židle.** `src/world/Chair.js` factory + `Stickman.linkTo` extension `finalYaw` (post-arrival turn-to) + `arrivePosition` (lerp pelvisu z approach na cíl synchronně s post-turn-to). Demo s tlačítkem „Posaď se", post-turn-to + plynulý posun pelvisu na sedátko. Empirické změření výšky pelvisu v SIT pose = `H × 0.176` (předchozí odhad 36 % byl 2× off).
-- [x] **Stage 2 — Postel.** `src/world/Bed.js` factory (matrace + headboard, výška identicky s židlí). 2-stage interakce řízená externím schedulerem v demu (`bedStep` proměnná, render loop tick): Stage A linkTo k sit edge → 0.5 s pauza → Stage B teleport `worldPos = layCenter` + setStatus(LAY). Snap-to-floor override během lying na vrch matrace. `demos/demo04_interactables.html` sjednocuje židli + postel.
-- [ ] **Stage 3 — PoseSequence refactor.** Po 2 klientech extrahovat link logiku z `Stickman.js` (~150 LOC) do `src/character/PoseSequence.js`. API: `new PoseSequence(stickman).linkTo({...}).wait(t).transitionTo({status, worldPos, worldYaw, duration}).run()`. Plynulé chained transitions (= postel sit→lay s lerp místo teleportu). Audit 6 vrstev per `feedback_skeleton_refactor_checklist`.
-- [ ] **Bug rotation order Z×Y×X.** Při LAY pose (`rootRotation.x = 90°`) se `worldYaw` aplikuje PŘED RX rotace → roll kolem podélné osy postavy místo XZ rotace. Workaround pro Stage 2: `bed.facing = 0`. Plný fix přes change rotation order v `Skeleton.computeWorldTransforms` na `T*Rz*Ry*Rx` (= apply X→Y→Z). Vyžaduje audit pose, Drift overlay, Inspector. Side-quest při Stage 3 nebo samostatně.
-- [ ] **Stage 4+ — další objekty.** Klika/dveře (s IK pinem na hand), sběr věci (= bend down + grab IK + carry pose). Patří k specializovaným interakcím; PoseSequence Stage 3 musí mít API pro IK pin.
+- [x] **Stage 2 — Postel.** `src/world/Bed.js` factory (matrace + headboard, výška identicky s židlí). 2-stage interakce řízená externím schedulerem v demu. `demos/demo04_interactables.html` sjednocuje židli + postel.
 
-### F2.5 Sezení 11 — Demo03 Pose linker — **HOTOVO**
+### F2.7 Sezení 12 — PoseSequence refactor — **HOTOVO**
 
-Štaflový postup ve 5 fázích, šestá (extrakce do PoseSequence třídy) přesunuta do F2.6 Stage 3 (= Demo04 jako 2. klient).
+Extrakce link logiky ze Stickmana do skladatelné třídy. Hybrid API (builder venku, step array uvnitř). Plynulý sit→lay v posteli místo teleportu.
 
-- [x] **Stage 1** — `Stickman.linkTo({x, z})` + `worldPos` field; demo03_linker.html (klik → walk konst. 1.5 j/s, bez turn-to)
-- [x] **Stage 2** — turn-to phase: `worldYaw` field + shortest-path normalize do (-180°, 180°]; postava se otočí k cíli za 0.4 s, pak teprve WALK
-- [x] **Stage 2.5** — rychlost dynamicky z foot trackingu (= identický algoritmus s treadmillem v demo02), žádné magic numbers; reset support state v `setStatus`
-- [x] **Stage 3** — locomotion picker `_pickLocomotion(d)`: `< 5 j` WALK, `< 15 j` Jog, `≥ 15 j` Sprint; `_pendingAction` field předá vybraný status z linkTo do post-turn-to dispatch
-- [x] **Stage 4** — 3 anchors A/B/C: persistentní žluté markery + sprite labely (CanvasTexture s strokem) + tlačítka v levém panelu; click do podlahy = ad-hoc target; Reset polohy
-- [x] **Stage 5** — cílová pose: `linkTo({ x, z, then })` přijímá `then = { status, params }`; `_onArrival` field; B → Sit, C → Lay anchors
+- [x] **`src/character/PoseSequence.js`** — nová třída ~340 LOC. 4 primitives: `linkTo({x,z,finalYaw?,arrivePosition?})`, `setStatus(status, params)`, `wait(seconds)`, `transitionTo({worldPos?,worldYaw?,status?,params?,duration})`. Builder API (chainable, vrací `this`); step array uvnitř (= F3 Brain může skládat sekvence programaticky). `run()` připojí seq jako `stickman._activeSeq` a abortuje předchozí. `tick(dt)` má smyčku — chained instant steps proběhnou v 1 frame (eliminuje 2-frame delay mezi „arrival" a „setStatus(SIT)").
+- [x] **Stickman cleanup** — z 478 → ~245 LOC. Odstraněny: `linkTo`, `_pickLocomotion`, 11 link fields, ~280 LOC link logiky v `animate()`. Zachovány: `worldPos`/`worldYaw` (zdroj pravdy), foot tracking jako public `computeBodyForwardSpeed()` (rename z `_computeFootDz`). Přidáno: `_activeSeq` hookup v `animate()` + `isMoving` getter.
+- [x] **demo03_linker přepsán** — `goTo(x, z, arriveStatus)` přes `new PoseSequence(s).linkTo({x,z}).setStatus(arriveStatus).run()`. Reset polohy: `seq.abort()` místo přepisování fields. `stickman.isMoving` místo poking `target`/`turning`.
+- [x] **demo04_interactables přepsán** — externí `bedStep` scheduler smazán. Postel = jedna builder sekvence: `linkTo → setStatus(SIT) → wait(0.5) → transitionTo({worldPos: layCenter, status: LAY, duration: 0.6})`. **Plynulý lerp pelvisu z okraje na střed synchronně s SIT→LAY pose blendem** = hlavní novinka oproti dnešnímu teleportu.
+
+### F2.8 Rotation order fix — **otevřené (side-quest)**
+
+- [ ] Změna `Skeleton.computeWorldTransforms` z `T·Rx·Ry·Rz` na `T·Rz·Ry·Rx` (= apply order X→Y→Z). Vyžaduje audit: pose definice (layBack, prone, sit), Drift overlay, Inspector slidery, dema 01-04. Po fixu odstranit workaround `facing: 0` v `Bed.js`.
 
 ### F3 — Akvárium
 

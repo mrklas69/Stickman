@@ -89,9 +89,14 @@
     </div>
 
     <div id="panel-right">
-        <h3>Locomotion</h3>
+        <h3>PoseSequence</h3>
         <p>
-            Hranice se vybírají v <code>_pickLocomotion()</code>:<br>
+            <code>new PoseSequence(s).linkTo({x, z}).setStatus(arrive).run()</code>
+        </p>
+
+        <h3 style="margin-top:14px">Locomotion</h3>
+        <p>
+            Hranice volí <code>linkTo</code> uvnitř PoseSequence:<br>
             • &lt; 5 j → <b>WALK</b><br>
             • &lt; 15 j → <b>Jog</b><br>
             • ≥ 15 j → <b>Sprint</b>
@@ -104,9 +109,9 @@
 
         <h3 style="margin-top:14px">Cílová pose</h3>
         <p>
-            Anchor může mít <code>then = { status, params }</code>. Po arrival
-            Stickman přepne na ten status místo defaultního STAND. Anchor B
-            sedí, anchor C leží. Klik do podlahy = bez <code>then</code> = STAND.
+            Anchor má <code>arriveStatus</code>. Sekvence po arrival volá
+            <code>setStatus(arriveStatus)</code>. Anchor B sedí, anchor C
+            leží. Klik do podlahy = STAND.
         </p>
     </div>
 </div>
@@ -117,6 +122,7 @@
     import { StickmanView }   from '../src/view/StickmanView.js';
     import { BasicScene }     from '../src/scene/BasicScene.js';
     import { Stickman }       from '../src/character/Stickman.js';
+    import { PoseSequence }   from '../src/character/PoseSequence.js';
     import { Status }         from '../src/character/Status.js';
 
     // =========================================================================
@@ -147,20 +153,18 @@
     // 3. Anchors A/B/C — persistentní markery v scéně + tlačítka + cílová pose
     // =========================================================================
     // Definice anchorů: pozice (x, z), label pro 3D sprite, btnLabel pro tlačítko,
-    // a optional `then = { status, params }` (cílová pose po arrival, Stage 5):
-    //   A: vlevo vzadu, then=null   → po arrival STAND (default)
-    //   B: vpravo daleko, then=SIT  → postava si po dorazu sedne (= „židle")
-    //   C: vepředu, then=LAY        → postava si po dorazu lehne (= „postel")
+    // a `arriveStatus` = co dělat po arrival:
+    //   A: vlevo vzadu, STAND      → běžné zastavení
+    //   B: vpravo daleko, SIT      → postava si po dorazu sedne (= „židle")
+    //   C: vepředu, LAY            → postava si po dorazu lehne (= „postel")
     //
-    // Hodnoty `then` jsou jen { status, params } — Stickman.linkTo je předá
-    // dál; arrival block volá setStatus(then.status, then.params).
+    // Sekvence: linkTo(pos) → setStatus(arriveStatus). Žádný plynulý lerp
+    // pos+yaw při přepnutí pose — Pose.lerp v Stickman.setStatus blendne
+    // úhly za 0.4 s (= „přirozené sednutí na místě").
     const ANCHORS = [
-        { x:  -8, z:  -3, label: 'A', btnLabel: 'A — Stand',
-          then: null },
-        { x:  12, z: -10, label: 'B', btnLabel: 'B — Sit',
-          then: { status: Status.SIT, params: {} } },
-        { x:   0, z:  -4, label: 'C', btnLabel: 'C — Lay',
-          then: { status: Status.LAY, params: {} } },
+        { x:  -8, z:  -3, label: 'A', btnLabel: 'A — Stand', arriveStatus: Status.STAND },
+        { x:  12, z: -10, label: 'B', btnLabel: 'B — Sit',   arriveStatus: Status.SIT },
+        { x:   0, z:  -4, label: 'C', btnLabel: 'C — Lay',   arriveStatus: Status.LAY },
     ];
 
     /**
@@ -230,13 +234,17 @@
      *
      * @param {number} x
      * @param {number} z
-     * @param {{status: string, params: object}|null} then - cílová pose po arrival
+     * @param {string} [arriveStatus=Status.STAND] - co dělat po arrival
      */
-    function goTo(x, z, then = null) {
-        stickman.linkTo({ x, z, then });
-        // linkTo provede arrival check (no-op pokud < 0.3 j); v takovém případě
-        // marker stejně schováme, postava nikam nejde.
-        if (stickman.target !== null) {
+    function goTo(x, z, arriveStatus = Status.STAND) {
+        new PoseSequence(stickman)
+            .linkTo({ x, z })
+            .setStatus(arriveStatus)
+            .run();
+        // Target marker = aktivní jen při probíhající sekvenci. PoseSequence
+        // by mohla být no-op (cíl < ARRIVAL_TOL); v takovém případě isMoving
+        // bude false a marker se schová v render loopu.
+        if (stickman.isMoving) {
             target.position.x = x;
             target.position.z = z;
             target.visible = true;
@@ -259,15 +267,12 @@
     }
 
     for (const a of ANCHORS) {
-        addBtn(anchorsContainer, `▶ ${a.btnLabel}`, () => goTo(a.x, a.z, a.then));
+        addBtn(anchorsContainer, `▶ ${a.btnLabel}`, () => goTo(a.x, a.z, a.arriveStatus));
     }
 
     addBtn(actionsContainer, 'Reset polohy', () => {
-        // Tvrdý reset: zastav, zruš target a pending akce, postav postavu zpět na (0, 0).
-        stickman.target = null;
-        stickman.turning = false;
-        stickman._pendingAction = null;
-        stickman._onArrival = null;
+        // Tvrdý reset: zruš aktivní seq + postav postavu zpět na (0, 0).
+        if (stickman._activeSeq) stickman._activeSeq.abort();
         stickman.worldPos.x = 0;
         stickman.worldPos.z = 0;
         stickman.worldYaw = 0;
@@ -302,8 +307,8 @@
         stickman.animate(dt);
         skel.snapToFloor(FLOOR_Y);
 
-        // Když Stickman dorazí, sám si přepne target = null + Status.STAND.
-        if (stickman.target === null) target.visible = false;
+        // PoseSequence skončila → schovat target marker.
+        if (!stickman.isMoving) target.visible = false;
 
         view.update();
     });

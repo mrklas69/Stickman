@@ -404,20 +404,29 @@ Easing = **cubic ease-out** (`1 − (1−t)³`). Důvod volby: postava rychle re
 
 Edge case — **přepnutí mid-transition**: `Pose.capture` zachytí AKTUÁLNĚ blended pózu (ne původní `transitionFrom`), takže nový přechod plynule pokračuje z aktuálního stavu, žádný "skok zpět".
 
-### Pose linking (linkTo) *(Demo03 — Sezení 11)*
+### PoseSequence *(Demo03/04 — Sezení 11–12)*
 
-Postava dojde z aktuální polohy k cíli a volitelně přepne na cílovou pose. Vstupní bod: `stickman.linkTo({ x, z, then })` (`then = { status, params }` je optional).
+Skladatelná sekvence akcí pro postavu (= „skript pohybu"). Hybrid API: builder venku (chainable, vrací `this`), step array uvnitř (= F3 Brain může skládat sekvence programaticky bez fluent řetězců). Třída v `src/character/PoseSequence.js`.
 
-Vnitřní 4-fázová sekvence:
+**4 primitives:**
 
-1. **Distance pick** v `_pickLocomotion(d)` — `< 5 j` WALK, `< 15 j` Jog (`RUN_PRESETS.jog`), `≥ 15 j` Sprint (`RUN_PRESETS.sprint`). Vyhodnocuje se jen při `linkTo`, během cesty se nemění.
-2. **Turn-to phase** — pokud rozdíl yaw mezi aktuální orientací a směrem k cíli je `≥ 5°`, postava nejdřív stojí (Status.STAND) a `worldYaw` se interpoluje shortest-path do cíle za `turnDuration` (default `0.4 s`). Při `< 5°` se přeskočí.
-3. **Locomotion** — `setStatus` na vybraný status (WALK / RUN s preset). Rychlost není konstanta — je to rychlost stojné nohy v body frame přes [foot tracking](#foot-tracking-treadmill). Posun `worldPos` se akumuluje v `Stickman.animate`.
-4. **Arrival** při `distance < 0.3 j` — `setStatus(then.status, then.params)`, default `STAND`. Anchor s `then = { status: SIT }` → postava si po dorazu sedne.
+- `linkTo({ x, z, finalYaw?, arrivePosition? })` — přemístění s lokomocí (turn-to → walk/run + optional post-arrival turn-to s pos lerp)
+- `setStatus(status, params)` — synchronní přepnutí (instant)
+- `wait(seconds)` — pauza (postava drží aktuální status — Drift, dýchání, gestures fungují)
+- `transitionTo({ worldPos?, worldYaw?, status?, params?, duration })` — plynulý lerp pos+yaw paralelně se setStatus pose blendem
 
-Stickman vlastní `worldPos` a `worldYaw`; po `fn()` / Pose.apply zapisuje pravdu zpět do `skel.rootPosition.x/z + rootRotation.y` (= animace fn() můžou volat `skel.reset()` bez konfliktu). Algoritmus selhává pro plížení (PRONE), kde PASSIVE noha drží history navždy s |dz|≈0 — viz odložené v F2.4.
+Aktivní sekvence = `stickman._activeSeq`. `seq.run()` ji připojí a aborts předchozí. `Stickman.animate(dt)` ji každý frame tickne. `tick()` má smyčku — chained instant steps (= `arrival → setStatus(SIT)`) proběhnou v 1 frame (eliminuje 2-frame delay).
 
-Generalizovaná `PoseSequence` třída (multi-stage: approach → IK pin → hold → exit) je plánovaná pro Demo04 Interactable, kde reálné constraints (IK pin v turn-to, interruption mid-sequence) ukáží potřebné API. Aktuálně by byla premature abstraction nad jediným klientem.
+**linkTo vnitřní 4-fázová sekvence:**
+
+1. **Distance pick** v `_pickLocomotion(d)` — `< 5 j` WALK, `< 15 j` Jog, `≥ 15 j` Sprint. Vyhodnocuje se jen při startu, během cesty se nemění.
+2. **Turn-to phase** — pokud rozdíl yaw `≥ 5°`, postava nejdřív stojí (Status.STAND) a `worldYaw` se interpoluje shortest-path do cíle za 0.4 s. Při `< 5°` se přeskočí.
+3. **Locomotion** — `setStatus` na vybraný status. Rychlost není konstanta — je to rychlost stojné nohy v body frame přes foot tracking (`stickman.computeBodyForwardSpeed()`). Posun `worldPos` se akumuluje.
+4. **Arrival** při `distance < 0.3 j` — pokud `finalYaw` zadán a diff ≥ 5°, druhá turn-to fáze (synchronně s pos lerp z arrival pos na `arrivePosition`); jinak teleport `arrivePosition` a advance.
+
+Stickman vlastní `worldPos` a `worldYaw` jako jediný zdroj pravdy; po `fn()` / Pose.apply zapisuje pravdu zpět do `skel.rootPosition.x/z + rootRotation.y`. PoseSequence (a demo02 treadmill) tyto fields MUTUJE.
+
+Foot tracking algoritmus selhává pro plížení (PRONE), kde PASSIVE noha drží history navždy s |dz|≈0 — viz odložené v F2.4.
 
 ### Brain *(plánováno, F3)*
 

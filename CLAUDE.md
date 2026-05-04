@@ -39,17 +39,22 @@ src/util/       UTILITY — bez Three.js, čisté funkce
 src/library/    KNIHOVNA POSE — definované jednou, importované všude
   Poses.js          — STANCE_POSES / SIT_POSES / LIE_POSES (Inspector) + BASIC/BALANCE/HEAD_SUPPORT pro stará dema
 
-src/character/  CHARACTER — wrapper Stickman + Status + Animations + Gestures
+src/character/  CHARACTER — wrapper Stickman + Status + Animations + Gestures + PoseSequence
   Status.js         — enum (STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE, CRAWL, PRONE, SNEAK)
   Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK / RUN_PRESETS / DEFAULTS_DRIFT / JUMP_PRESETS / DEFAULTS_CRAWL/PRONE/SNEAK
-  Stickman.js       — wrapper { skeleton, status, time, params, transitionDuration, … }, setStatus, animate(dt) s plynulými přechody
+  Stickman.js       — wrapper { skeleton, status, time, params, worldPos, worldYaw, _activeSeq, transitionDuration, … }, setStatus, animate(dt) s plynulými přechody, computeBodyForwardSpeed
   Gestures.js       — Bio/Fyzio overlay s Poisson scheduler; 7 gest s pose-based keyframes + root delta
+  PoseSequence.js   — skladatelná sekvence akcí (linkTo + setStatus + wait + transitionTo); builder venku, step array uvnitř
+
+src/world/      WORLD — interaktivní objekty
+  Chair.js          — factory makeChair → mesh + approach + sitYaw
+  Bed.js            — factory makeBed → mesh + sitEdge + layCenter
 
 demos/          DEMO HTML — každé demo je samostatná stránka
 .source/        SCRATCH — vyřazené prototypy (mimo architekturu)
 ```
 
-**Pravidlo pro novou logiku:** model neimportuje z view/scene. View neimportuje z scene. Util/library nesmí importovat z model (kromě Pose v library/Poses.js — Pose je sama čistá data). Character importuje z model/ a library/, nikdy z view/ ani scene/.
+**Pravidlo pro novou logiku:** model neimportuje z view/scene. View neimportuje z scene. Util/library nesmí importovat z model (kromě Pose v library/Poses.js — Pose je sama čistá data). Character importuje z model/ a library/, nikdy z view/ ani scene/. World vrací THREE.Group + metadata, neví o Stickmanovi.
 
 ## Klíčové konvence (gotchas)
 
@@ -120,6 +125,8 @@ demos/          DEMO HTML — každé demo je samostatná stránka
 | Přidat nový stav (status) | `src/character/Status.js` + `Animations.js` |
 | Přidat animační funkci | `src/character/Animations.js` |
 | Změnit délku přechodu | `Stickman.transitionDuration` (default 0.4 s) |
+| Pose linking / multi-stage akce | `src/character/PoseSequence.js` (`linkTo`, `setStatus`, `wait`, `transitionTo`) |
+| Přidat interaktivní objekt (židle, postel, …) | `src/world/` (factory vrací `{ mesh, approach, sitEdge, … }`) |
 | Přidat geometrickou utilitu | `src/util/Geometry.js` |
 | Přidat UI helper | `src/util/DemoUI.js` |
 | Vlastní renderování | `src/view/StickmanView.js` (markery, materiály) |
