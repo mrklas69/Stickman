@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo 03 — Biosféra (F3 Stage 1: 5 postav pod kopulí)</title>
+    <link rel="icon" href="data:,">
+
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a22;
+               font-family: sans-serif; color: #ddd; }
+
+        #app {
+            position: relative;
+            display: grid;
+            grid-template-columns: 200px 1fr 320px;
+            grid-template-areas: "left viewport right";
+            height: 100vh;
+            width: 100vw;
+        }
+        #viewport     { grid-area: viewport; position: relative;
+                        min-width: 0; min-height: 0; overflow: hidden; }
+        #panel-left   { grid-area: left;   background: #22222b; border-right: 1px solid #444;
+                        overflow-y: auto; padding: 14px 12px; box-sizing: border-box; }
+        #panel-right  { grid-area: right;  background: #22222b; border-left: 1px solid #444;
+                        overflow-y: auto; padding: 14px 14px; box-sizing: border-box; }
+
+        #info { position: absolute; top: 10px; left: 10px;
+                pointer-events: none; text-shadow: 1px 1px 2px black; }
+        #info h2 { margin: 0 0 2px 0; font-size: 1.05em; }
+        #info p  { margin: 0; opacity: 0.7; font-size: 0.82em; }
+
+        #panel-left h3, #panel-right h3 { margin: 0 0 10px 0; color: #ffaa66;
+                         font-size: 0.85em; text-transform: uppercase;
+                         letter-spacing: 0.5px; }
+        #panel-right p  { font-size: 0.78em; color: #999; line-height: 1.5; }
+        #panel-right code { background: #333; padding: 2px 5px; border-radius: 3px;
+                            font-size: 0.82em; }
+        .stat { font-size: 0.82em; color: #aaa; margin: 6px 0; }
+        .stat span { color: #fff; }
+    </style>
+    <script type="importmap">
+    { "imports": {
+        "three":          "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+        "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+    }}
+    </script>
+</head>
+<body>
+<div id="app">
+    <div id="panel-left">
+        <h3>Biosféra</h3>
+        <div class="stat">Postavy: <span id="stat-count">5</span></div>
+        <div class="stat">Radius kopule: <span id="stat-radius">35 j</span></div>
+        <div class="stat">Objekty: <span>3 židle + 2 postele</span></div>
+
+        <h3 style="margin-top:18px">Obyvatelé</h3>
+        <div id="agent-list"></div>
+    </div>
+
+    <style>
+        .agent-row {
+            display: flex; align-items: center;
+            padding: 6px 8px; border-radius: 4px;
+            margin-bottom: 4px; background: #2a2a35;
+            font-size: 0.78em;
+        }
+        .agent-swatch {
+            width: 14px; height: 14px; border-radius: 50%;
+            margin-right: 8px; flex-shrink: 0;
+            border: 1px solid #444;
+        }
+        .agent-stats { flex: 1; line-height: 1.3; }
+        .agent-stats .label { color: #888; font-size: 0.92em; }
+    </style>
+
+    <div id="viewport">
+        <div id="info">
+            <h2>Demo 03 — Biosféra (F3 Stage 4)</h2>
+            <p>5 postav s atributy zdraví/štěstí — barva kostí mapuje hue z zdraví (red→green) a saturation z štěstí. Židle + postele mají rezervaci (max 1 obyvatel).</p>
+        </div>
+    </div>
+
+    <div id="panel-right">
+        <h3>Stage roadmap</h3>
+        <p>
+            <b>Stage 1–3.5</b>: postavy, Brain, target-driven volby. ✓<br>
+            <b>Stage 4</b> (= teď): vizuální varianty — atributy zdraví/štěstí → HSL barva kostí; agent list s živými hodnotami.<br>
+            <b>Stage 5+</b>: dynamika atributů (aktivity ovlivňují zdraví/štěstí).
+        </p>
+
+        <h3 style="margin-top:14px">Color mapping</h3>
+        <p>
+            <code>hue = health/100 × 0.33</code> (red→green)<br>
+            <code>sat = 0.4 + happiness/100 × 0.5</code><br>
+            <code>lit = 0.5</code> (fixní)
+        </p>
+
+        <h3 style="margin-top:14px">Architektura</h3>
+        <p>
+            <code>src/world/Biosphere.js</code> — factory makeBiosphere<br>
+            <code>src/character/Brain.js</code> — per-instance Markov scheduler<br>
+            <code>demo03_biosphere.html</code> — array Stickmanů (KISS, Aquarium třída zatím premature)
+        </p>
+    </div>
+</div>
+
+<script type="module">
+    import * as THREE         from 'three';
+    import { Skeleton }       from '../src/model/Skeleton.js';
+    import { StickmanView }   from '../src/view/StickmanView.js';
+    import { BasicScene }     from '../src/scene/BasicScene.js';
+    import { Stickman }       from '../src/character/Stickman.js';
+    import { Status }         from '../src/character/Status.js';
+    import { Brain }          from '../src/character/Brain.js';
+    import { makeBiosphere }  from '../src/world/Biosphere.js';
+    import { makeChair }      from '../src/world/Chair.js';
+    import { makeBed }        from '../src/world/Bed.js';
+
+    // =========================================================================
+    // 1. Konstanty + scéna
+    // =========================================================================
+    const H            = 8;
+    const FLOOR_Y      = -H / 2;
+    const NUM_AGENTS   = 5;
+    const BIO_RADIUS   = 35;
+    const PENTAGON_R   = 14;    // poloměr kruhu, na kterém stojí pentagon postav
+
+    const viewport = document.getElementById('viewport');
+    const scene = new BasicScene({
+        cameraHeight:   13,
+        cameraDistance: 56,     // kopule R=35 → kamera mimo, vidíme celé sklo
+        shadowBounds:   40,     // postavy chodí až do innerRadius 33 → potřeba ≥35
+        container: viewport,
+        floorY: FLOOR_Y,
+    });
+
+    // Stage 3.5 Markov — STAND/WALK + target-driven SIT (chair) / LAY (bed).
+    // Brain dispatcher v Brain._goSitInChair / _goLayInBed vyrobí PoseSequence
+    // s linkTo k objektu, pak SIT (židle) nebo SIT+wait+transitionTo(LAY) (postel).
+    const BIOSPHERE_MARKOV = Object.freeze({
+        [Status.STAND]: [
+            { status: Status.STAND, params: { idle: true },     weight: 3 },   // Drift
+            { status: Status.WALK,                               weight: 2 },   // random walk
+            { status: Status.SIT,   params: { target: 'chair' }, weight: 3 },   // jdi si sednout
+            { status: Status.LAY,   params: { target: 'bed' },   weight: 1 },   // jdi si lehnout
+        ],
+        [Status.SIT]: [
+            { status: Status.STAND, weight: 6 },
+            { status: Status.SIT,   weight: 4 },
+        ],
+        [Status.LAY]: [
+            { status: Status.STAND, weight: 6 },
+            { status: Status.LAY,   weight: 4 },
+        ],
+    });
+
+    // =========================================================================
+    // 2. Biosféra (skleněná kopule)
+    // =========================================================================
+    const biosphere = makeBiosphere({
+        x: 0, z: 0,
+        radius: BIO_RADIUS,
+        floorY: FLOOR_Y,
+    });
+    scene.scene.add(biosphere.mesh);
+
+    // =========================================================================
+    // 2b. Objekty v biosféře — 3 židle + 2 postele
+    // =========================================================================
+    // Židle: na kruhu poloměru 18, úhly 30°/150°/270°. Facing = aby postava
+    // v sedu koukala dovnitř (= ke středu biosféry).
+    const chairs = [];
+    for (const ang of [30, 150, 270]) {
+        const a = ang * Math.PI / 180;
+        const x = 18 * Math.cos(a);
+        const z = 18 * Math.sin(a);
+        // worldYaw postavy v sedu = atan2(-x, -z) (= ke středu).
+        const facing = Math.atan2(-x, -z) * 180 / Math.PI;
+        const chair = makeChair({ x, z, facing, floorY: FLOOR_Y, height: H });
+        scene.scene.add(chair.mesh);
+        chairs.push(chair);
+    }
+
+    // Postele: facing = 0 (omezení rotation order bug, viz CLAUDE.md). Dvě podél
+    // -X a +X stran biosféry.
+    const beds = [];
+    for (const p of [{ x: -25, z: -8 }, { x: 25, z: 8 }]) {
+        const bed = makeBed({ x: p.x, z: p.z, facing: 0, floorY: FLOOR_Y, height: H });
+        scene.scene.add(bed.mesh);
+        beds.push(bed);
+    }
+
+    // =========================================================================
+    // 3. N postav v pentagonu
+    // =========================================================================
+    // Array tří paralelních seznamů (skeleton/view/stickman) + brain. KISS:
+    // zatím žádná Aquarium třída — refactor až s 2. demem (memory:
+    // feedback_premature_abstraction).
+    const agents = [];
+
+    // Helper — mapuje attrs (health, happiness) na HSL barvu kostí:
+    //   hue 0° (red) → 120° (green) podle health
+    //   saturation 0.4 → 0.9 podle happiness (low = desaturovaný)
+    //   lightness fixní 0.5
+    function attrsToColor(health, happiness) {
+        const c = new THREE.Color();
+        const hue = (health / 100) * 0.333;          // 0..0.333 = red..green
+        const sat = 0.4 + (happiness / 100) * 0.5;   // 0.4..0.9
+        c.setHSL(hue, sat, 0.5);
+        return c.getHex();
+    }
+
+    for (let i = 0; i < NUM_AGENTS; i++) {
+        const angle = (i / NUM_AGENTS) * Math.PI * 2;
+        const x = PENTAGON_R * Math.cos(angle);
+        const z = PENTAGON_R * Math.sin(angle);
+
+        // Random attrs init — uniform [0, 100] pro health a happiness.
+        // Stage 5+ může přidat dynamics (= attrs se mění podle aktivity).
+        const attrs = {
+            health:    Math.round(Math.random() * 100),
+            happiness: Math.round(Math.random() * 100),
+        };
+        const boneColor = attrsToColor(attrs.health, attrs.happiness);
+
+        const skel = new Skeleton(H);
+        const view = new StickmanView(skel, { boneColor });
+        scene.scene.add(view.group);
+
+        // Stickman wrapper drží worldPos/worldYaw — view čte z nich pozici/rotaci
+        // skupiny při view.update().
+        const stickman = new Stickman(skel, Status.STAND, {});
+        stickman.worldPos.x = x;
+        stickman.worldPos.z = z;
+        // Postavy se dívají do středu (= radiálně dovnitř). Body forward = -Z;
+        // pro pozici (x,z) na kruhu je směr ke středu (-x,-z); world yaw odpovídá
+        // úhlu k -Z = atan2(-x, -z). Konvence: yaw ve stupních, atan2 v rad.
+        stickman.worldYaw = Math.atan2(-x, -z) * 180 / Math.PI;
+
+        // Stage 3.5 — Brain aktivní + target-driven volby (chair/bed).
+        const brain = new Brain(stickman, {
+            world:   biosphere,
+            objects: { chairs, beds },
+            markov:  BIOSPHERE_MARKOV,
+            active:  true,
+        });
+
+        agents.push({ skel, view, stickman, brain, attrs, boneColor });
+    }
+
+    // === UI: agent list v levém panelu ===
+    // Statický seznam (= attrs zatím statické). Stage 5+ může přidat update
+    // při změně attrs (re-render row).
+    const agentList = document.getElementById('agent-list');
+    for (let i = 0; i < agents.length; i++) {
+        const a = agents[i];
+        const row = document.createElement('div');
+        row.className = 'agent-row';
+        const colorHex = '#' + a.boneColor.toString(16).padStart(6, '0');
+        row.innerHTML = `
+            <div class="agent-swatch" style="background: ${colorHex}"></div>
+            <div class="agent-stats">
+                <div>#${i + 1}</div>
+                <div><span class="label">zdraví:</span> ${a.attrs.health}</div>
+                <div><span class="label">štěstí:</span> ${a.attrs.happiness}</div>
+            </div>
+        `;
+        agentList.appendChild(row);
+    }
+
+    // =========================================================================
+    // 4. Render loop
+    // =========================================================================
+    // Detekce „postava na matraci" = LAY status + worldPos blízko některé postele.
+    // Per-stickman, dynamicky každý frame (postava může jít tam-a-zpět). Snap
+    // override musí zvednout podlahu o mattressHeight, jinak by snap-to-floor
+    // zatlačil pelvis pod matraci.
+    function findBedUnder(stickman) {
+        const px = stickman.worldPos.x;
+        const pz = stickman.worldPos.z;
+        for (const b of beds) {
+            const dx = px - b.layCenter.x;
+            const dz = pz - b.layCenter.z;
+            // Tolerance 4 j od středu matrace = pokrývá celý mattress
+            if (dx * dx + dz * dz < 16) return b;
+        }
+        return null;
+    }
+
+    for (const a of agents) {
+        a.skel.snapToFloor(FLOOR_Y);
+        a.view.update();
+    }
+
+    scene.onUpdate((dt) => {
+        for (const a of agents) {
+            a.brain.tick(dt);
+            a.stickman.animate(dt);
+
+            // === Hard clamp na biosphere innerRadius ===
+            // Defenzivní safety net: pokud foot tracking nebo PoseSequence
+            // pošle postavu mimo biosféru (= bug, ale nechceme ji ztratit),
+            // vrátíme ji na okraj. Distance > innerRadius → projektuj na okraj.
+            const dx = a.stickman.worldPos.x - biosphere.position.x;
+            const dz = a.stickman.worldPos.z - biosphere.position.z;
+            const r  = Math.hypot(dx, dz);
+            const maxR = biosphere.innerRadius;
+            if (r > maxR) {
+                a.stickman.worldPos.x = biosphere.position.x + (dx / r) * maxR;
+                a.stickman.worldPos.z = biosphere.position.z + (dz / r) * maxR;
+            }
+
+            // Snap override pro LAY na matraci.
+            const bedUnder = (a.stickman.status === Status.LAY)
+                ? findBedUnder(a.stickman)
+                : null;
+            const snapY = bedUnder
+                ? FLOOR_Y + bedUnder.mattressHeight
+                : FLOOR_Y;
+            a.skel.snapToFloor(snapY);
+
+            a.view.update();
+        }
+    });
+    scene.start();
+</script>
+</body>
+</html>

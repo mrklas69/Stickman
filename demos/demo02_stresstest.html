@@ -117,7 +117,7 @@
     } from '../src/character/Gestures.js';
     import {
         DEFAULTS_WALK, RUN_PRESETS, DEFAULTS_DRIFT, DEFAULTS_CRAWL,
-        DEFAULTS_PRONE, DEFAULTS_SNEAK, JUMP_PRESETS,
+        PRONE_PRESET, DEFAULTS_SNEAK, JUMP_PRESETS,
     } from '../src/character/Animations.js';
 
     // =========================================================================
@@ -324,7 +324,7 @@
     addBtn(statusContainer, 'crawl', 'Po čtyřech',
         () => stickman.setStatus(Status.CRAWL, { ...DEFAULTS_CRAWL }));
     addBtn(statusContainer, 'prone', 'Plížení',
-        () => stickman.setStatus(Status.PRONE, { ...DEFAULTS_PRONE }));
+        () => stickman.setStatus(Status.PRONE, { ...PRONE_PRESET }));
     addBtn(statusContainer, 'sneak', 'Přikrčená chůze',
         () => stickman.setStatus(Status.SNEAK, { ...DEFAULTS_SNEAK }));
     addBtn(statusContainer, 'jumpV', 'Skok nahoru',

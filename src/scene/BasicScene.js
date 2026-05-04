@@ -22,6 +22,9 @@ export class BasicScene {
      * @param {HTMLElement} [opts.container]        kam vložit canvas (default = document.body)
      * @param {boolean} [opts.shadows=true]         zapnout stíny (DirectionalLight + shadowMap)
      * @param {number|null} [opts.floorY=null]      Y úroveň podlahy (null = bez podlahy)
+     * @param {number} [opts.shadowBounds=30]       polovina rozsahu shadow camera frustum
+     *                                              (= ±N j od originu). Pro velké scény
+     *                                              (biosféra R=35) zvětši na 40+.
      */
     constructor({
         background = 0x1a1a22,
@@ -30,6 +33,7 @@ export class BasicScene {
         container = null,
         shadows = true,
         floorY = null,
+        shadowBounds = 30,
     } = {}) {
         // Pokud uživatel dodal vlastní container, měříme jeho velikost.
         // Jinak (default) = document.body, měříme celé okno (= chování pro demo01/02).
@@ -71,10 +75,10 @@ export class BasicScene {
             dir.castShadow = true;
             // Shadow camera bounds — co bude ve stínu zachyceno. Velký rozsah
             // protože postava může v demo02 chodit po šachovnici daleko od origin.
-            dir.shadow.camera.left   = -30;
-            dir.shadow.camera.right  =  30;
-            dir.shadow.camera.top    =  30;
-            dir.shadow.camera.bottom = -30;
+            dir.shadow.camera.left   = -shadowBounds;
+            dir.shadow.camera.right  =  shadowBounds;
+            dir.shadow.camera.top    =  shadowBounds;
+            dir.shadow.camera.bottom = -shadowBounds;
             dir.shadow.camera.near   = 0.5;
             dir.shadow.camera.far    = 80;
             dir.shadow.mapSize.set(2048, 2048);   // vyšší rezoluce pro větší bounds

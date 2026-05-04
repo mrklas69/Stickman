@@ -75,12 +75,18 @@ Sjednotí dynamická dema (04+09+11+12+13) přes nový `Stickman` model se `stat
 - [x] **PRONE (plížení) rewrite** — z Bezier-through-MID na asymetrický 4-fázový cyklus per noha (REACH → PUSH → PASSIVE → drag). Diagonální párování s pažemi (L paže s P nohou, P paže s L nohou). Vyžaduje další ladění (viz F2.4).
 - [x] **`@THINK` Demo03 + Demo04 plán** — pose linking (PoseSequence: distance metric + locomotion picker) + interakce (Interactable: approachPose + usePose + IK pin). Zapsáno do IDEAS.md jako roadmap pro F3 a dál.
 
+### F3 Biosféra polish — **otevřené**
+
+- [ ] **Postavy občas „uniknou" z biosféry** — v demo03_biosphere se sporadicky stalo, že postava vyběhla mimo R=35. Aktuálně řešeno hard clampem na `innerRadius` v render loopu (defenzivní safety net). Skutečný bug pravděpodobně v `PoseSequence._tickMoving` nebo `Stickman.computeBodyForwardSpeed` (= jeden frame s divně velkou `dz_body`). Najít root cause + smazat clamp workaround.
+- [ ] **Kolize Stickman ↔ Stickman + Stickman ↔ objekty** — postavy procházejí skrz sebe i přes objekty (židle/postel). Pro Biosféru s 5 postavami stačí jednoduché soft repulsion (= odpuzování při blízkosti).
+- [ ] **Rezervace objektů** — dvě postavy si můžou „vybrat" stejnou židli současně. Brain by měl mít accessor `world.getFreeChair()` co označí Brain ↔ chair lock.
+
 ### F2.4 Plížení polish — **otevřené**
 
-PRONE rewrite v Sezení 10 dal nohy do dobrého stavu, ale:
-- [ ] **Paže lifting body** — shoulder.x angles tlačí lokte do podlahy → snap-to-floor zvedá celou postavu. Potřeba přepočítat keyframes pro body rotation -87°: shoulder.x ~170° (= rotace přes vrch do flat-forward), nikoli 60-75° (= mířící do podlahy).
-- [ ] **Floor scroll wrong direction** — current algoritmus (longest history) selhává v plížení: PASSIVE leg ankle drží history forever s |dz|≈0, případně active joint má opačnou Z motion než očekáváno. Potřebuje smarter selection: hybrid history + max |dz|, NEBO sign flip pro plížení.
-- [ ] **Spine C-curve + pelvis rotation** (per uživatelská reference v `c:\TEMP\Plížení\`): spine bends laterally (torso.z) opačně podle stojné nohy; pelvis rotuje vpřed k flexed knee (rootRotation.y nebo torso twist). Hlava counter-rotation. Zatím staticky drženo.
+PRONE rewrite v Sezení 13 (CRAWL framework + cyklus na shoulder.z/hip.z, splay 90°/75°, sign flip pro foot tracking) — funkční ale ne dokonalé.
+- [ ] **Vylepšit animaci plížení v Demo02** — doladit amplitudy swingu, párování paže/noha, případně rozšířit hipL/R.z limit z 90° (= dnes peak) pro symetričtější cyklus s pažemi.
+- [ ] **C-curve overlay** — spine bend (torso.z), pelvis yaw (rootRotation.y), head counter (neck.z) synchronizované s leg cyklem (= cos(2π·phaseA)). Implementováno a testováno v S13, ale **rozbíjí foot tracking** (rotace trupu/pelvisu mění world Z primary supports = treadmill čte fake motion). Patří do overlay vrstvy aplikované POST-tracking, ne do primary animateProne. Defaults v PRONE_PRESET vypnuté (= 0). Hodnoty z S13: spineBend 15°, pelvisYaw 10°, neckCounter 8° — vizuálně dobré.
+- [ ] **Foot tracking pro PRONE** — současný „longest history support" selhává v plížení (všechny 4 končetiny mají dlouhou history, výběr je arbitrální). Možnosti: (a) per-status override jako forwardSpeed v JUMP_PRESETS, (b) inteligentnější algoritmus (např. „support s největším |dz|"), (c) hybridní (preferuj kontakt na podlaze + max stability).
 
 ### F2.2 Sezení 9 — synchronizace + audit + 3 nové statusy + Neklid/Drift přepis — **HOTOVO**
 

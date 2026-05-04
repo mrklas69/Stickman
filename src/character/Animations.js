@@ -100,65 +100,47 @@ export const DEFAULTS_CRAWL = Object.freeze({
 /**
  * Defaultní parametry pro PRONE (plížení / commando crawl).
  *
- * Animace = smooth-step lerp mezi dvěma asymetrickými klíčovými pózami:
- *   BASE    — pravá strana „nápřahuje": pravá paže natažená vpřed,
- *             levá paže opřená pod hrudí, levá noha rovně dozadu, pravé
- *             koleno přitažené do strany v poloze žáby (knee out wide).
- *   INVERSE — zrcadlově: levá strana nápřahuje, pravé koleno se narovnává,
- *             levé se přitahuje do žáby.
- * Pose se mezi sebou plynule lerpují → "odraz od pravého kolena, narovnání,
- * přitažení levé nohy, nápřah levé ruky" se odehraje sám díky angles
- * interpolaci.
+ * Plížení = chůze po kolenech s pažemi/stehny rozkročenými 90° do stran
+ * (= „180° celkem" mezi koleny). Pelvis na zem.
  *
- * Pose hodnoty byly authored uživatelem v Inspectoru.
+ * Cyklus se aplikuje na **shoulder.z / hip.z** osy, NE na x jako CRAWL.
+ * Důvod: po `shoulder.z = 90°` (splay) se Mat4 ZYX rotation order otočí
+ * tak, že `shoulder.x` rotuje paži kolem její vlastní podélné osy
+ * (= axiální rotace, vizuálně neviditelná). Pro biceps swing dopředu/dozadu
+ * potřebujeme rotaci kolem svislé osy procházející ramenem = `shoulder.z`.
+ *
+ * Sdílí s CRAWL: `legPose()` framework, diagonální trot (L paže ↔ P noha).
  */
-/**
- * Defaultní parametry pro PRONE (plížení / low army crawl).
- *
- * Cyklus = asymetrický 4-fázový (NE symetrický trot). Jedna noha v REACH
- * (žabí frog up forward), pak PUSH (planted, tělo se posune nad ní), pak
- * PASSIVE (drag straight back). Druhá noha o 0.5 cyklu offset.
- *
- * Per leg cycle:
- *   t ∈ [0,    0.25)  → REACH → PUSH (planting + body sliding over knee)
- *   t ∈ [0.25, 0.5)   → PUSH → PASSIVE (lift-off, leg extends back)
- *   t ∈ [0.5,  0.75)  → PASSIVE drag (= druhá noha pracuje)
- *   t ∈ [0.75, 1.0)   → PASSIVE → REACH (lift forward into frog)
- *
- * Paže + torso jsou zatím STATICKÉ (= legs first iteration). Diagonální
- * párování s pažemi (L paže ↔ P noha, P paže ↔ L noha) přijde v dalším kroku.
- */
-export const DEFAULTS_PRONE = Object.freeze({
-    tempo:       0.4,    // Hz — pomalé tempo (1 cyklus = 2.5 s)
-    bodyTilt:   -87,     // ° — rootRotation.x (body horizontal)
-    torsoAngle: -11,     // ° — torso.x (mírná deflexe pro head-up siluetu)
-    neckAngle:  -60,     // ° — neck.x záklon (hlava nahoru, kouká vpřed)
+export const PRONE_PRESET = Object.freeze({
+    tempo:        0.47,   // Hz — sdíleno s CRAWL (pomalý klus)
+
+    // Báze
+    bodyTilt:    -90,     // ° — kostra plně horizontálně, pelvis na zem
+    torsoAngle:    0,     // ° — narovnaná záda
+    neckAngle:   -50,     // ° — hlava nahoru, kouká vpřed (záklon krku po horizontalizaci)
+
+    // Paže: base = mid-cyklus shoulder.z, oscilace ± armSwing.
+    // Cyklus 70..110 (limit shoulder.z = 120, headroom OK).
+    armSplay:     90,     // ° — base shoulder.z (paže ven do strany)
+    armSwing:     20,     // ° — amplituda horizontálního swingu (biceps dopředu/dozadu)
+    elbowBase:    30,     // ° — base elbow.x (mírný ohyb lokte při plížení)
+    elbowFlex:    60,     // ° — extra flex v půli swing fáze
+
+    // Nohy: base = peak abdukce − swing (= peak v ph=0.5 dosáhne 90° = limit).
+    // Cyklus 60..90 (hip.z limit 90 → swing jde jen dolů z peak, žádný clamp).
+    legSplay:     75,     // ° — base hip.z (mid-cyklus, peak 90 v půli)
+    legSwing:     15,     // ° — amplituda horizontálního swingu (stehno dopředu/dozadu)
+    kneeBase:     30,     // ° — base knee.x
+    kneeFlex:     60,     // ° — extra flex v půli swing fáze
+
+    // C-curve overlay vypnutý — patří do overlay vrstvy (jako Fidget/Breathing),
+    // ne do primary animation. Aplikování v animateProne ovlivňuje world Z všech
+    // joints (= rotace trupu posune ramena/lokty), což rozbíjí foot tracking
+    // treadmill. F2.4 polish to vrátí jako post-tracking overlay.
+    spineBend:     0,     // ° — torso.z lateral bend (úklon trupu k REACH straně)
+    pelvisYaw:     0,     // ° — rootRotation.y (pelvis vpřed ke flexované noze)
+    neckCounter:   0,     // ° — neck.z counter-rotation (hlava drží orientaci)
 });
-
-// Per-leg keyframes — anatomické úhly (symetrické pro L i P).
-// REACH    = knee max-flexed up forward (žabí frog, max abdukce ven).
-// PUSH     = knee planted on floor, body slid forward over knee
-//            (hip flex DECREASED z REACH → PUSH = body se posunul vpřed).
-// PASSIVE  = leg straight back, dragging on floor.
-const PRONE_LEG_REACH   = { hipX: 84, hipY:  -3, hipZ: 80, kneeX:  97 };
-const PRONE_LEG_PUSH    = { hipX: 25, hipY:  -3, hipZ: 70, kneeX: 100 };
-const PRONE_LEG_PASSIVE = { hipX:  2, hipY: -22, hipZ:  5, kneeX:   0 };
-
-// Per-arm keyframes — kontralaterální párování s nohou:
-//   L paže = stejná phase jako P noha (= když P noha REACH, L paže REACH)
-//   P paže = stejná phase jako L noha
-//
-// POZN. body rotation -87°: shoulder.x ~ 170° rotuje paži z rest "viset dolů
-// (= dozadu po rotaci body)" PŘES vrch do "natažený dopředu, plochý k podlaze".
-// Nižší shoulder.x (např. 65°) znamená paži směřuje DO podlahy → snap-to-floor
-// nadzvedne celou postavu.
-//
-// REACH    = wrist max forward (paže natažená kupředu, plochá k podlaze).
-// PULL     = forearm pulls under body toward waist (vnitřní rot + bent elbow).
-// PASSIVE  = arm lying along body side at body level (paže pasivní).
-const PRONE_ARM_REACH   = { shX: 170, shY:   0, shZ: 20, elX:  30 };
-const PRONE_ARM_PULL    = { shX: 140, shY: -50, shZ: 15, elX: 100 };
-const PRONE_ARM_PASSIVE = { shX:  10, shY:   0, shZ: 10, elX:  15 };
 
 /**
  * Defaultní parametry pro SNEAK (přikrčená/maskovaná chůze).
@@ -520,84 +502,59 @@ function animateCrawl(skeleton, time, params) {
     skeleton.setAngle('kneeL',     'x', p.kneeBase    + rearL.knee);
 }
 
-// === PRONE (plížení / low army crawl) ======================================
-// Asymetrický 4-fázový cyklus (= NE symetrický trot). Jedna noha v aktivním
-// REACH→PUSH→PASSIVE→REACH cyklu, druhá o 0.5 offset. Ve fázi PASSIVE leg
-// pasivně leží natažená dozadu (= druhá noha aktuálně propeluje).
+// === PRONE (plížení / commando crawl) ======================================
+// Stejný diagonální trot jako CRAWL (legPose framework + L paže ↔ P noha),
+// ale paže/stehna jsou rozkročené 90° do strany a cyklus oscilauje na
+// **shoulder.z / hip.z** osách místo .x.
 //
-// Vizuální reference: c:\TEMP\Plížení\ (Obrázek.png + Tabulka.csv).
-
-/** Smoothstep — měkké S-křivkové easing 0→1 (žádné trhnutí na keyframe hranách). */
-function smoothstepProne(t) {
-    return t * t * (3 - 2 * t);
-}
-
-/** Lerp dvou key-objektů per-klíč (generická — funguje pro leg keys i arm keys). */
-function lerpProneKeys(a, b, t) {
-    const out = {};
-    for (const k of Object.keys(a)) {
-        out[k] = a[k] + (b[k] - a[k]) * t;
-    }
-    return out;
-}
-
-/**
- * Generická 4-segmentová phase function. t ∈ [0,1] vrací keyframe-blended
- * anatomické úhly per fáze cyklu.
- *
- *   0..0.25   REACH → ACTIVE    (plant + power stroke)
- *   0.25..0.5 ACTIVE → PASSIVE  (lift off, retract)
- *   0.5..0.75 PASSIVE drag      (druhá končetina pracuje)
- *   0.75..1.0 PASSIVE → REACH   (lift forward, příprava)
- *
- * KEY_R = REACH, KEY_A = active middle (PUSH pro nohy / PULL pro paže), KEY_P = PASSIVE.
- */
-function pronePhase(t, KEY_R, KEY_A, KEY_P) {
-    if (t < 0.25) return lerpProneKeys(KEY_R, KEY_A, smoothstepProne(t * 4));
-    if (t < 0.5)  return lerpProneKeys(KEY_A, KEY_P, smoothstepProne((t - 0.25) * 4));
-    if (t < 0.75) return KEY_P;
-    return               lerpProneKeys(KEY_P, KEY_R, smoothstepProne((t - 0.75) * 4));
-}
-
+// Geometrický důvod: po `shoulder.z = 90°` Mat4 ZYX rotation order způsobí,
+// že `shoulder.x` rotace okolo lokal X = osa podél paže = AXIÁLNÍ rotace
+// (vizuálně neviditelná). Pro biceps swing dopředu/dozadu po horizontalizaci
+// kostry potřebujeme rotaci kolem svislé osy procházející ramenem = shoulder.z.
 function animateProne(skeleton, time, params) {
     skeleton.reset();
-    const p = { ...DEFAULTS_PRONE, ...params };
+    const p = { ...PRONE_PRESET, ...params };
 
-    // Statická báze — tělo horizontální, head up.
-    skeleton.rootRotation = { x: p.bodyTilt, y: 0, z: 0 };
+    // === Diagonální trot (stejné páry jako CRAWL) ===
+    const phaseA = (time * p.tempo) % 1;
+    const phaseB = (phaseA + 0.5) % 1;
+
+    // === C-curve secondary motion ===
+    // wave = cos(2π·phaseA): wave(0) = +1 (L noha REACH), wave(0.5) = -1 (P noha REACH).
+    // Spine bends k REACH straně (= opačně od „stojné", tlačící nohy);
+    // pelvis rotuje vpřed na stranu flexované nohy; hlava counter-rotates.
+    const wave = Math.cos(phaseA * 2 * Math.PI);
+
+    // === Báze (kostra plně horizontálně, pelvis na zem) + C-curve ===
+    skeleton.rootRotation = {
+        x: p.bodyTilt,
+        y: -wave * p.pelvisYaw,    // pelvis yaw synchronní s leg cyklem
+        z: 0,
+    };
     skeleton.setAngle('torso', 'x', p.torsoAngle);
+    skeleton.setAngle('torso', 'z',  wave * p.spineBend);
     skeleton.setAngle('neck',  'x', p.neckAngle);
+    skeleton.setAngle('neck',  'z', -wave * p.neckCounter);
 
-    // Asymetrický 4-fázový cyklus s diagonálním párováním:
-    //   P noha + L paže v phase t (= když P noha REACH, L paže REACH; atd.)
-    //   L noha + P paže v phase t+0.5
-    const t  = (time * p.tempo) % 1;
-    const tL = (t + 0.5) % 1;
+    // L paže + P noha (phase A)
+    const frontL = legPose(phaseA, p.armSwing, p.elbowFlex);
+    const rearR  = legPose(phaseA, p.legSwing, p.kneeFlex);
+    // Cyklus na .z = horizontální swing okolo svislé osy ramene/kyčle.
+    // Sign offset MÍNUS (ne plus jako CRAWL): po splay 90° + bodyTilt -90°
+    // je geometrický směr „dopředu ve world" opačný k CRAWL hip.x +amp
+    // (= jinak by treadmill foot tracking interpretoval STANCE jako couvání).
+    skeleton.setAngle('shoulderL', 'z', p.armSplay  - frontL.hip);
+    skeleton.setAngle('elbowL',    'x', p.elbowBase + frontL.knee);
+    skeleton.setAngle('hipR',      'z', p.legSplay  - rearR.hip);
+    skeleton.setAngle('kneeR',     'x', p.kneeBase  + rearR.knee);
 
-    const legR = pronePhase(t,  PRONE_LEG_REACH, PRONE_LEG_PUSH, PRONE_LEG_PASSIVE);
-    const armL = pronePhase(t,  PRONE_ARM_REACH, PRONE_ARM_PULL, PRONE_ARM_PASSIVE);
-    const legL = pronePhase(tL, PRONE_LEG_REACH, PRONE_LEG_PUSH, PRONE_LEG_PASSIVE);
-    const armR = pronePhase(tL, PRONE_ARM_REACH, PRONE_ARM_PULL, PRONE_ARM_PASSIVE);
-
-    skeleton.setAngle('hipR',  'x', legR.hipX);
-    skeleton.setAngle('hipR',  'y', legR.hipY);
-    skeleton.setAngle('hipR',  'z', legR.hipZ);
-    skeleton.setAngle('kneeR', 'x', legR.kneeX);
-
-    skeleton.setAngle('hipL',  'x', legL.hipX);
-    skeleton.setAngle('hipL',  'y', legL.hipY);
-    skeleton.setAngle('hipL',  'z', legL.hipZ);
-    skeleton.setAngle('kneeL', 'x', legL.kneeX);
-
-    skeleton.setAngle('shoulderL', 'x', armL.shX);
-    skeleton.setAngle('shoulderL', 'y', armL.shY);
-    skeleton.setAngle('shoulderL', 'z', armL.shZ);
-    skeleton.setAngle('elbowL',    'x', armL.elX);
-
-    skeleton.setAngle('shoulderR', 'x', armR.shX);
-    skeleton.setAngle('shoulderR', 'y', armR.shY);
-    skeleton.setAngle('shoulderR', 'z', armR.shZ);
-    skeleton.setAngle('elbowR',    'x', armR.elX);
+    // P paže + L noha (phase B)
+    const frontR = legPose(phaseB, p.armSwing, p.elbowFlex);
+    const rearL  = legPose(phaseB, p.legSwing, p.kneeFlex);
+    skeleton.setAngle('shoulderR', 'z', p.armSplay  - frontR.hip);
+    skeleton.setAngle('elbowR',    'x', p.elbowBase + frontR.knee);
+    skeleton.setAngle('hipL',      'z', p.legSplay  - rearL.hip);
+    skeleton.setAngle('kneeL',     'x', p.kneeBase  + rearL.knee);
 }
 
 // === SNEAK (přikrčená/maskovaná chůze) =====================================

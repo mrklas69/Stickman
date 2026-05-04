@@ -38,12 +38,22 @@ const BONE_NAMES = {
 };
 
 export class StickmanView {
-    constructor(skeleton) {
+    /**
+     * @param {Skeleton} skeleton
+     * @param {object} [opts]
+     * @param {number} [opts.boneColor] — override barvy kostí (default PAL.bone).
+     *                                     Pro per-Stickman vizuální varianty
+     *                                     (F3 biosféra: zdraví/štěstí jako barva).
+     */
+    constructor(skeleton, opts = {}) {
         this.skeleton = skeleton;
-        // Materiály — sdílené napříč meshes (úspora paměti)
+        const boneColor = opts.boneColor ?? PAL.bone;
+        // Materiály — vlastní instance per-View (= per-Stickman barva).
+        // Note: pro N postav s identickou barvou by bylo úspornější sdílet
+        // mats globálně, ale pro biosféru chceme různé barvy → vlastní materials.
         this.mats = {
-            torso: new THREE.MeshStandardMaterial({ color: PAL.bone,    roughness: 0.5 }),
-            limb:  new THREE.MeshStandardMaterial({ color: PAL.bone,    roughness: 0.5 }),
+            torso: new THREE.MeshStandardMaterial({ color: boneColor, roughness: 0.5 }),
+            limb:  new THREE.MeshStandardMaterial({ color: boneColor, roughness: 0.5 }),
             // Joint sféry sdílejí barvu se support markery — joints JSOU supports.
             joint: new THREE.MeshStandardMaterial({ color: PAL.support, roughness: 0.4 }),
             head:  new THREE.MeshStandardMaterial({ color: PAL.head,    roughness: 0.6 }),

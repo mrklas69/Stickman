@@ -53,6 +53,10 @@
         <strong>Demo 03 — Pose linker</strong>
         <span>Pose linking prototyp (5 fází hotovo). 3 anchors A/B/C s cílovou pose (A → Stand, B → Sit, C → Lay) + ad-hoc click do scény. Postava se otočí k cíli (turn-to ~0.4 s), dojde podle locomotion pickeru (<code>&lt; 5 j</code> WALK, <code>&lt; 15 j</code> Jog, <code>≥ 15 j</code> Sprint), pak přepne na <code>then.status</code>. Rychlost = foot tracking. Extrakce do PoseSequence třídy odložena na Demo04 (= reálné constraints).</span>
     </a>
+    <a href="demos/demo03_biosphere.html">
+        <strong>Demo 03 — Biosféra (F3 Stage 1)</strong>
+        <span>5 postav stojí v pentagonu pod skleněnou kopulí (radius 32 j, MeshPhysicalMaterial s transmission). Brain.js skeleton (Markov scheduler per-Stickman) existuje, ale je v Stage 1 neaktivní. Stage 2+ zapne Brain (náhodné statusy), Stage 3 přidá WALK přes PoseSequence.linkTo, Stage 4 vizuální varianty (zdraví/štěstí jako barvy). Stage 1 ověřuje multi-Stickman pipeline + glass dome rendering.</span>
+    </a>
     <a href="demos/demo04_interactables.html">
         <strong>Demo 04 — Interakce s objekty (Stage 2)</strong>
         <span>Dva Interactable objekty z vrstvy <code>src/world/</code> — židle (1-stage: dojdi → sedni) a postel (2-stage: dojdi na okraj → sedni → lehni). Linker rozšířen o <code>finalYaw</code> (post-arrival turn-to) a <code>arrivePosition</code> (lerp pelvisu z approach na cíl během rotace). Multi-stage řízeno externím schedulerem v demu — Stage 3 ho extrahuje do <code>PoseSequence</code> třídy.</span>

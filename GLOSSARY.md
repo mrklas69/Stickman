@@ -428,9 +428,41 @@ Stickman vlastní `worldPos` a `worldYaw` jako jediný zdroj pravdy; po `fn()` /
 
 Foot tracking algoritmus selhává pro plížení (PRONE), kde PASSIVE noha drží history navždy s |dz|≈0 — viz odložené v F2.4.
 
-### Brain *(plánováno, F3)*
+### Brain *(F3 Biosféra — Sezení 13)*
 
-State machine s timery (idle 5 s → walk 10 s → sit 8 s → …). Markov-chain pravděpodobnosti přechodů mezi statusy. **Žádné LLM/planning.** Použití v akváriu (multi-instance Stickman).
+Per-Stickman state scheduler. Třída v `src/character/Brain.js`. Markov matice mapuje aktuální Status → array `{ status, params?, weight }`; weighted random výběr. Per-instance timer (uniform [3, 10] s) → po vypršení vybere nový Status; dispatch buď přímo `setStatus`, nebo přes `PoseSequence` builder pro multi-step akce (random walk, sit on chair, lay in bed).
+
+**Pause na aktivní sequence**: Brain nerozhoduje, dokud postava nedoběhne k cíli (= žádné aborty PoseSequence). `_wasInSeq` flag detekuje konec seq → reset timer („odpočinek" 3-10 s před další volbou).
+
+**Rezervace objektů (= chair/bed)**: při dispatchi `_goSitInChair` / `_goLayInBed` Brain filtruje `!obj.occupant`, vybere náhodně z volných, nastaví `obj.occupant = stickman` a `Brain._heldObject = obj`. Uvolnění při detekci „postava není engaged" (= status ne SIT/LAY ANI v aktivní sequence). Pokud žádný objekt volný, fallback random walk.
+
+**Markov matice** (default `DEFAULT_MARKOV` exportován):
+```
+STAND → STAND idle / WALK / SIT(chair) / LAY(bed)
+SIT   → STAND / SIT (= pokračuj sedět)
+LAY   → STAND / LAY
+WALK  → STAND (po dorazu)
+```
+
+Použití multi-instance v `demo03_biosphere.html` — 5 nezávislých Brainů, každý drží vlastní timer + lock state.
+
+### Biosphere *(F3 — Sezení 13)*
+
+Skleněná polokoule pod kterou žijí postavy. Factory v `src/world/Biosphere.js`. `makeBiosphere({ x, z, radius, floorY, margin })` vrací `{ mesh, position, radius, floorY, innerRadius }`.
+
+Mesh: `THREE.SphereGeometry(R, 48, 24, 0, 2π, 0, π/2)` (= horní polovina koule). Material `MeshPhysicalMaterial`: `transmission: 0.92, roughness: 0.05, ior: 1.5, thickness: 0.5, transparent: true, side: DoubleSide`. Sklo s lomem světla, viditelné zevnitř i zvenku.
+
+`innerRadius = radius - margin` (default margin 2 j) = vnitřní okraj pro pohyb postav (nelezou skrz stěnu). Brain `_randomDestination()` vrací pos uvnitř innerRadius.
+
+### Atributy postavy *(F3 Biosféra Stage 4)*
+
+Jednoduchý attribute model pro vizuální variabilitu: `agent.attrs = { health, happiness }`, oba v rozsahu [0, 100]. Mapují se na barvu kostí postavy přes HSL:
+
+- `hue = health/100 × 0.333` (0° červená → 120° zelená)
+- `saturation = 0.4 + happiness/100 × 0.5` (0.4 = šedavý, 0.9 = sytý)
+- `lightness = 0.5` (fixní)
+
+Nemocná smutná postava = šedočervená, zdravá veselá = sytě zelená, smíšené = oranžové/žluté. Atributy jsou zatím statické (random init); Stage 5+ může přidat dynamics (= aktivity SIT/LAY → +health, WALK → +happiness, atd.).
 
 ---
 

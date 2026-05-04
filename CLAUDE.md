@@ -39,16 +39,18 @@ src/util/       UTILITY — bez Three.js, čisté funkce
 src/library/    KNIHOVNA POSE — definované jednou, importované všude
   Poses.js          — STANCE_POSES / SIT_POSES / LIE_POSES (Inspector) + BASIC/BALANCE/HEAD_SUPPORT pro stará dema
 
-src/character/  CHARACTER — wrapper Stickman + Status + Animations + Gestures + PoseSequence
+src/character/  CHARACTER — wrapper Stickman + Status + Animations + Gestures + PoseSequence + Brain
   Status.js         — enum (STAND, SIT, WALK, RUN, SWIM, CLIMB, JUMP, LAY, SLEEP, DANCE, CRAWL, PRONE, SNEAK)
-  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK / RUN_PRESETS / DEFAULTS_DRIFT / JUMP_PRESETS / DEFAULTS_CRAWL/PRONE/SNEAK
+  Animations.js     — registr Status → fn(skeleton, time, params); DEFAULTS_WALK / RUN_PRESETS / DEFAULTS_DRIFT / JUMP_PRESETS / DEFAULTS_CRAWL / PRONE_PRESET / DEFAULTS_SNEAK
   Stickman.js       — wrapper { skeleton, status, time, params, worldPos, worldYaw, _activeSeq, transitionDuration, … }, setStatus, animate(dt) s plynulými přechody, computeBodyForwardSpeed
   Gestures.js       — Bio/Fyzio overlay s Poisson scheduler; 7 gest s pose-based keyframes + root delta
   PoseSequence.js   — skladatelná sekvence akcí (linkTo + setStatus + wait + transitionTo); builder venku, step array uvnitř
+  Brain.js          — per-Stickman Markov scheduler (timer, weighted choice, pause na PoseSequence, rezervace objektů přes _heldObject)
 
-src/world/      WORLD — interaktivní objekty
-  Chair.js          — factory makeChair → mesh + approach + sitYaw
-  Bed.js            — factory makeBed → mesh + sitEdge + layCenter
+src/world/      WORLD — interaktivní objekty (factory vrací THREE.Group + metadata)
+  Chair.js          — makeChair → mesh + approach + sitYaw
+  Bed.js            — makeBed → mesh + sitEdge + layCenter
+  Biosphere.js      — makeBiosphere → polokoule MeshPhysicalMaterial s transmission, innerRadius pro pohyb postav
 
 demos/          DEMO HTML — každé demo je samostatná stránka
 .source/        SCRATCH — vyřazené prototypy (mimo architekturu)
